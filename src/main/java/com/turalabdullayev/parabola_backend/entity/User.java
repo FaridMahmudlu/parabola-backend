@@ -60,7 +60,7 @@ public class User {
 	@Column(name = "shoulder_cm")
 	private Double shoulder;
 
-	@Column(name = "creates_at", updatable = false)
+	@Column(name = "created_at", updatable = false)
 	private LocalDateTime createdAt;
 
 	@PrePersist
@@ -70,5 +70,4 @@ public class User {
 			this.role = Role.ROLE_USER;
 		}
 	}
-
 }
