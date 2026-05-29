@@ -9,8 +9,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class RegisterRequest {
-	@NotBlank(message = "İstifadəçi adı boş buraxıla bilməz")
-	@Size(min = 3, max = 20, message = "İstifadəçi adı minimum 3, maksimum 20 simvoldan ibarət olmalıdır")
+
 	private String username;
 
 	@NotBlank(message = "Email boş buraxıla bilməz")
@@ -20,5 +19,4 @@ public class RegisterRequest {
 	@NotBlank(message = "Şifrə boş buraxıla bilməz")
 	@Size(min = 6, message = "Şifrə ən azı 6 simvoldan ibarət olmalıdır")
 	private String password;
-
 }

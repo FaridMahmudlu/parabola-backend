@@ -35,14 +35,18 @@ public class AuthService {
 			throw new RuntimeException("Bu email ünvanı artıq qeydiyyatdan keçib!");
 		}
 
-		if (userRepository.existsByUsername(request.getUsername())) {
-			throw new RuntimeException("Bu istifadəçi adı artıq götürülüb!");
+		String finalUsername = request.getUsername();
+		if (finalUsername == null || finalUsername.trim().isEmpty()) {
+			finalUsername = request.getEmail().split("@")[0];
 		}
 
-		User user = User.builder().username(request.getUsername()).email(request.getEmail())
-				.password(passwordEncoder.encode(request.getPassword())).role(Role.ROLE_USER)
+		if (userRepository.existsByUsername(finalUsername)) {
+			finalUsername = finalUsername + "_" + System.currentTimeMillis() % 1000;
+		}
 
-				.build();
+		User user = User.builder().username(finalUsername).email(request.getEmail())
+				.password(passwordEncoder.encode(request.getPassword()))
+				.role(request.getEmail().startsWith("zara") ? Role.ROLE_SELLER : Role.ROLE_USER).build();
 
 		userRepository.save(user);
 
