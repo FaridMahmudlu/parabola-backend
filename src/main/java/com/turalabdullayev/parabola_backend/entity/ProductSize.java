@@ -44,6 +44,12 @@ public class ProductSize {
 	@Column(name = "total_length_cm")
 	private Double totalLength;
 
+	@Column(name = "clothing_fit")
+	private String clothingFit;
+
+	@Column(name = "model_body_type")
+	private String modelBodyType;
+
 	@ManyToOne
 	@JoinColumn(name = "product_id", nullable = false)
 	@JsonBackReference

@@ -31,9 +31,61 @@ public class ProductService {
 		if (product.getSizes() != null) {
 			for (ProductSize size : product.getSizes()) {
 				size.setProduct(product);
+				populateDimensionsFromFitAndManken(size);
 			}
 		}
 		return productRepository.save(product);
+	}
+
+	private void populateDimensionsFromFitAndManken(ProductSize pSize) {
+		String size = pSize.getSizeName() != null ? pSize.getSizeName().trim().toUpperCase() : "M";
+		String fit = pSize.getClothingFit() != null ? pSize.getClothingFit().trim() : "Orta";
+		String manken = pSize.getModelBodyType() != null ? pSize.getModelBodyType().trim() : "Orta";
+
+		double chest = 95.0;
+		double shoulder = 44.0;
+		double armLength = 60.0;
+		double totalLength = 70.0;
+
+		// 1. Base sizes mapping
+		if ("S".equals(size)) {
+			chest = 90.0; shoulder = 40.0; armLength = 59.0; totalLength = 68.0;
+		} else if ("M".equals(size)) {
+			chest = 98.0; shoulder = 43.0; armLength = 61.0; totalLength = 70.0;
+		} else if ("L".equals(size)) {
+			chest = 106.0; shoulder = 45.0; armLength = 63.0; totalLength = 72.0;
+		} else if ("XL".equals(size)) {
+			chest = 114.0; shoulder = 47.0; armLength = 65.0; totalLength = 74.0;
+		} else if ("XXL".equals(size)) {
+			chest = 122.0; shoulder = 49.0; armLength = 67.0; totalLength = 76.0;
+		}
+
+		// 2. Adjust based on Manken - Ölçü tipi
+		if (manken.contains("Daha arıq")) {
+			chest -= 4.0; shoulder -= 2.0;
+		} else if (manken.contains("Arıq")) {
+			chest -= 2.0; shoulder -= 1.0;
+		} else if (manken.contains("Orta iri")) {
+			chest += 2.0; shoulder += 1.0;
+		} else if (manken.contains("İri")) {
+			chest += 4.0; shoulder += 2.0;
+		}
+
+		// 3. Adjust based on Geyim (Fit)
+		if (fit.contains("Kiçik")) {
+			chest -= 3.0;
+		} else if (fit.contains("Orta kiçik")) {
+			chest -= 1.5;
+		} else if (fit.contains("Orta geniş")) {
+			chest += 2.0;
+		} else if (fit.contains("Geniş")) {
+			chest += 5.0;
+		}
+
+		pSize.setChest(chest);
+		pSize.setShoulder(shoulder);
+		pSize.setArmLength(armLength);
+		pSize.setTotalLength(totalLength);
 	}
 
 	public List<Product> getAllProducts() {
