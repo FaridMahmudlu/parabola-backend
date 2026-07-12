@@ -42,6 +42,15 @@ public class User {
 	@Column(nullable = false)
 	private Role role;
 
+	@Column(name = "gender")
+	private String gender;
+
+	@Column(name = "clothing_size")
+	private String clothingSize;
+
+	@Column(name = "body_type")
+	private String bodyType;
+
 	@Column(name = "height_cm")
 	private Double height;
 
