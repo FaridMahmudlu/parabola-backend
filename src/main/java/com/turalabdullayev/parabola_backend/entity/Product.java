@@ -48,6 +48,15 @@ public class Product {
 
 	private String contactLink;
 
+	private String gender;
+
+	private String color;
+
+	private String style;
+
+	@Column(length = 1000)
+	private String description;
+
 	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
 	@JsonManagedReference
 	@Builder.Default

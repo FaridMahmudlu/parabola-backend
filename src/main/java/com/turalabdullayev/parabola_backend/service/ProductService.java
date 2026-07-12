@@ -40,7 +40,22 @@ public class ProductService {
 	private void populateDimensionsFromFitAndManken(ProductSize pSize) {
 		String size = pSize.getSizeName() != null ? pSize.getSizeName().trim().toUpperCase() : "M";
 		String fit = pSize.getClothingFit() != null ? pSize.getClothingFit().trim() : "Orta";
-		String manken = pSize.getModelBodyType() != null ? pSize.getModelBodyType().trim() : "Orta";
+		String manken = pSize.getModelBodyType() != null ? pSize.getModelBodyType().trim() : "";
+
+		if (manken.isEmpty() || "Orta".equals(manken)) {
+			if (fit.contains("Kiçik")) {
+				manken = "Daha arıq";
+			} else if (fit.contains("Orta kiçik")) {
+				manken = "Arıq";
+			} else if (fit.contains("Orta geniş")) {
+				manken = "Orta iri";
+			} else if (fit.contains("Geniş")) {
+				manken = "İri";
+			} else {
+				manken = "Orta";
+			}
+			pSize.setModelBodyType(manken);
+		}
 
 		double chest = 95.0;
 		double shoulder = 44.0;
