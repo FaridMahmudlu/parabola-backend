@@ -26,8 +26,24 @@ public class UserController {
 
 	private final UserService userService;
 
+	@jakarta.persistence.PersistenceContext
+	private jakarta.persistence.EntityManager entityManager;
+
 	public UserController(UserService userService) {
 		this.userService = userService;
+	}
+
+	@GetMapping("/debug-db")
+	@io.swagger.v3.oas.annotations.Operation(hidden = true)
+	public ResponseEntity<?> debugDb() {
+		try {
+			java.util.List<?> result = entityManager.createNativeQuery(
+				"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'"
+			).getResultList();
+			return ResponseEntity.ok(result);
+		} catch (Exception e) {
+			return ResponseEntity.internalServerError().body(e.getMessage());
+		}
 	}
 
 	@PutMapping("/profile")
