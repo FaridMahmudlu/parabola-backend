@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import com.turalabdullayev.parabola_backend.dto.SizeRecommendationResponse;
@@ -46,7 +45,12 @@ public class ProductService {
 				.orElseThrow(() -> new RuntimeException("Məhsul tapılmadı!"));
 
 		User user = userRepository.findByEmail(userEmail)
-				.orElseThrow(() -> new UsernameNotFoundException("İstifadəçi tapılmadı!"));
+				.orElseGet(() -> User.builder()
+						.email(userEmail)
+						.username(userEmail.split("@")[0])
+						.password("")
+						.role(com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER)
+						.build());
 
 		SizeRecommendationResponse recommendation = sizeEngineService.calculateBestSize(user, product);
 

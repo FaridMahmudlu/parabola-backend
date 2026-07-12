@@ -2,7 +2,7 @@ package com.turalabdullayev.parabola_backend.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,16 +32,20 @@ public class UserController {
 
 	@PutMapping("/profile")
 	@Operation(summary = "Profil və bədən ölçülərini yenilə variantı", description = "Giriş etmiş istifadəçinin Azərbaycan dilindəki boy, çəki və digər bədən ölçülərini bazada yeniləyir.")
-	public ResponseEntity<String> updateProfile(@AuthenticationPrincipal UserDetails userDetails,
+	public ResponseEntity<String> updateProfile(@AuthenticationPrincipal Jwt jwt,
 			@Valid @RequestBody UserProfileUpdateRequest request) {
-		String result = userService.updateProfile(userDetails.getUsername(), request);
+		String email = jwt.getClaimAsString("email");
+		String roleName = jwt.getClaimAsString("role");
+		String result = userService.updateProfileWithRole(email, roleName, request);
 		return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/profile")
 	@Operation(summary = "Cari istifadəçinin profil məlumatlarını gətir", description = "Token sahibinin bütün profil və bədən ölçüsü məlumatlarını geri qaytarır.")
-	public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal UserDetails userDetails) {
-		User user = userService.getProfile(userDetails.getUsername());
+	public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
+		String email = jwt.getClaimAsString("email");
+		String roleName = jwt.getClaimAsString("role");
+		User user = userService.getProfileOrOrCreate(email, roleName);
 		return ResponseEntity.ok(user);
 	}
-}
+}
