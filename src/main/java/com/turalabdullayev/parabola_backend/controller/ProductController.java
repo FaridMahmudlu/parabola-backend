@@ -84,6 +84,9 @@ public class ProductController {
 	public ResponseEntity<Map<String, Object>> getProductDetails(@PathVariable Long id,
 			@AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
 		String email = jwt.getClaimAsString("email");
+		if (email == null || email.isBlank()) {
+			email = jwt.getSubject() + "@clerk.local";
+		}
 		Map<String, Object> details = productService.getProductDetailsWithRecommendation(id, email);
 		return ResponseEntity.ok(details);
 	}

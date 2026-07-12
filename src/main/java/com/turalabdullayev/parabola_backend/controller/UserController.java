@@ -35,6 +35,9 @@ public class UserController {
 	public ResponseEntity<String> updateProfile(@AuthenticationPrincipal Jwt jwt,
 			@Valid @RequestBody UserProfileUpdateRequest request) {
 		String email = jwt.getClaimAsString("email");
+		if (email == null || email.isBlank()) {
+			email = jwt.getSubject() + "@clerk.local";
+		}
 		String roleName = jwt.getClaimAsString("role");
 		String result = userService.updateProfileWithRole(email, roleName, request);
 		return ResponseEntity.ok(result);
@@ -44,6 +47,9 @@ public class UserController {
 	@Operation(summary = "Cari istifadəçinin profil məlumatlarını gətir", description = "Token sahibinin bütün profil və bədən ölçüsü məlumatlarını geri qaytarır.")
 	public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
 		String email = jwt.getClaimAsString("email");
+		if (email == null || email.isBlank()) {
+			email = jwt.getSubject() + "@clerk.local";
+		}
 		String roleName = jwt.getClaimAsString("role");
 		User user = userService.getProfileOrOrCreate(email, roleName);
 		return ResponseEntity.ok(user);

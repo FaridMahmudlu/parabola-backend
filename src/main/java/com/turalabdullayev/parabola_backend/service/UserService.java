@@ -28,9 +28,13 @@ public class UserService {
 		final com.turalabdullayev.parabola_backend.entity.Role finalRole = dbRole;
 		User user = userRepository.findByEmail(email)
 				.orElseGet(() -> {
+					String username = email != null ? email : "user";
+					if (email != null && email.contains("@")) {
+						username = email.split("@")[0];
+					}
 					User newUser = User.builder()
 							.email(email)
-							.username(email.split("@")[0])
+							.username(username)
 							.password("") // oauth/sso users have no passwords in local db
 							.role(finalRole)
 							.build();
