@@ -1,0 +1,8 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+frontend/
+uploads/
+*.log
+.idea/
+*.iml
+.DS_Store

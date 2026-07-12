@@ -65,7 +65,8 @@ public class ProductController {
 		Path filePath = uploadPath.resolve(uniqueFileName);
 		Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-		String fileUrl = "http://localhost:8080/uploads/" + uniqueFileName;
+		String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
+		String fileUrl = backendUrl + "/uploads/" + uniqueFileName;
 		product.setImageUrl(fileUrl);
 
 		Product savedProduct = productService.saveProduct(product);
