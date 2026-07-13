@@ -54,6 +54,12 @@ public class Product {
 
 	private String style;
 
+	@Column(name = "seller_email")
+	private String sellerEmail;
+
+	@Column(name = "seller_name")
+	private String sellerName;
+
 	@Column(length = 1000)
 	private String description;
 

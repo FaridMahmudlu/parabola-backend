@@ -11,4 +11,6 @@ import com.turalabdullayev.parabola_backend.entity.Product;
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
 	List<Product> findByCategory(String category);
+
+	List<Product> findBySellerEmail(String sellerEmail);
 }

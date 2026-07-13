@@ -13,9 +13,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,51 +45,126 @@ public class ProductController {
 		this.productService = productService;
 	}
 
-	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	@PreAuthorize("hasRole('SELLER')")
-	@Operation(summary = "Yeni geyim və Real Şəkil əlavə et (Satıcı)", description = "Sistemə satıcı rolu ilə daxil olmuş butiklər tərəfindən yeni geyim məlumatlarını və kompüterdən seçilən real şəkil faylını yükləyir.")
-	public ResponseEntity<Product> createProduct(@RequestPart("product") String productJson,
-			@RequestPart("image") MultipartFile file) throws IOException {
-
-		ObjectMapper objectMapper = new ObjectMapper();
-		Product product = objectMapper.readValue(productJson, Product.class);
-
-		Path uploadPath = Paths.get(UPLOAD_DIR);
-		if (!Files.exists(uploadPath)) {
-			Files.createDirectories(uploadPath);
-		}
-
-		String originalFileName = file.getOriginalFilename();
-		String fileExtension = originalFileName != null ? originalFileName.substring(originalFileName.lastIndexOf("."))
-				: ".jpg";
-		String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
-
-		Path filePath = uploadPath.resolve(uniqueFileName);
-		Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-		String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
-		String fileUrl = backendUrl + "/uploads/" + uniqueFileName;
-		product.setImageUrl(fileUrl);
-
-		Product savedProduct = productService.saveProduct(product);
-		return ResponseEntity.ok(savedProduct);
-	}
-
-	@GetMapping
-	@Operation(summary = "Bütün geyimləri siyahıla", description = "Sistemdəki bütün butiklərə aid geyimlərin ümumi siyahısını gətirir.")
-	public ResponseEntity<List<Product>> getAllProducts() {
-		List<Product> products = productService.getAllProducts();
-		return ResponseEntity.ok(products);
-	}
-
-	@GetMapping("/{id}")
-	@Operation(summary = "Geyim detalı və ağıllı ölçü tövsiyəsi", description = "Kliklənən geyimin bütün detallarını, butik DM linkini və istifadəçinin bədəninə uyğun gələn ağıllı ölçü tövsiyəsini tək paketdə qaytarır.")
-	public ResponseEntity<Map<String, Object>> getProductDetails(@PathVariable Long id,
-			@AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
+	private String extractEmail(Jwt jwt) {
 		String email = jwt.getClaimAsString("email");
 		if (email == null || email.isBlank()) {
 			email = jwt.getSubject() + "@clerk.local";
 		}
+		return email;
+	}
+
+	private String extractUsername(Jwt jwt) {
+		String name = jwt.getClaimAsString("name");
+		if (name != null && !name.isBlank()) return name;
+		String email = extractEmail(jwt);
+		return email.contains("@") ? email.split("@")[0] : email;
+	}
+
+	private String uploadImage(MultipartFile file) throws IOException {
+		Path uploadPath = Paths.get(UPLOAD_DIR);
+		if (!Files.exists(uploadPath)) {
+			Files.createDirectories(uploadPath);
+		}
+		String originalFileName = file.getOriginalFilename();
+		String fileExtension = originalFileName != null ? originalFileName.substring(originalFileName.lastIndexOf("."))
+				: ".jpg";
+		String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
+		Path filePath = uploadPath.resolve(uniqueFileName);
+		Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+		String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
+		return backendUrl + "/uploads/" + uniqueFileName;
+	}
+
+	// --- CREATE ---
+	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@PreAuthorize("hasRole('SELLER')")
+	@Operation(summary = "Yeni geyim əlavə et (Satıcı)")
+	public ResponseEntity<Product> createProduct(
+			@RequestPart("product") String productJson,
+			@RequestPart("image") MultipartFile file,
+			@AuthenticationPrincipal Jwt jwt) throws IOException {
+
+		ObjectMapper objectMapper = new ObjectMapper();
+		Product product = objectMapper.readValue(productJson, Product.class);
+
+		String fileUrl = uploadImage(file);
+		product.setImageUrl(fileUrl);
+
+		String sellerEmail = extractEmail(jwt);
+		String sellerName = extractUsername(jwt);
+
+		Product savedProduct = productService.saveProduct(product, sellerEmail, sellerName);
+		return ResponseEntity.ok(savedProduct);
+	}
+
+	// --- READ: Satıcının öz məhsulları ---
+	@GetMapping("/my")
+	@PreAuthorize("hasRole('SELLER')")
+	@Operation(summary = "Satıcının öz məhsullarını gətir")
+	public ResponseEntity<List<Product>> getMyProducts(@AuthenticationPrincipal Jwt jwt) {
+		String sellerEmail = extractEmail(jwt);
+		List<Product> products = productService.getProductsBySeller(sellerEmail);
+		return ResponseEntity.ok(products);
+	}
+
+	// --- UPDATE ---
+	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@PreAuthorize("hasRole('SELLER')")
+	@Operation(summary = "Məhsulu redaktə et (Satıcı)")
+	public ResponseEntity<?> updateProduct(
+			@PathVariable Long id,
+			@RequestPart("product") String productJson,
+			@RequestPart(value = "image", required = false) MultipartFile file,
+			@AuthenticationPrincipal Jwt jwt) {
+		try {
+			ObjectMapper objectMapper = new ObjectMapper();
+			Product updatedData = objectMapper.readValue(productJson, Product.class);
+
+			if (file != null && !file.isEmpty()) {
+				String fileUrl = uploadImage(file);
+				updatedData.setImageUrl(fileUrl);
+			}
+
+			String sellerEmail = extractEmail(jwt);
+			Product updated = productService.updateProduct(id, updatedData, sellerEmail);
+			return ResponseEntity.ok(updated);
+		} catch (RuntimeException e) {
+			return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+		} catch (IOException e) {
+			return ResponseEntity.status(500).body(Map.of("message", "Şəkil yüklənərkən xəta baş verdi."));
+		}
+	}
+
+	// --- DELETE ---
+	@DeleteMapping("/{id}")
+	@PreAuthorize("hasRole('SELLER')")
+	@Operation(summary = "Məhsulu sil (Satıcı)")
+	public ResponseEntity<?> deleteProduct(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+		try {
+			String sellerEmail = extractEmail(jwt);
+			productService.deleteProduct(id, sellerEmail);
+			return ResponseEntity.ok(Map.of("message", "Məhsul uğurla silindi!"));
+		} catch (RuntimeException e) {
+			return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
+		}
+	}
+
+	// --- READ ALL (sıralanmış) ---
+	@GetMapping
+	@Operation(summary = "Bütün geyimləri uyğunluq sırası ilə gətir")
+	public ResponseEntity<List<Product>> getAllProducts(@AuthenticationPrincipal Jwt jwt) {
+		String email = extractEmail(jwt);
+		List<Product> products = productService.getAllProductsSorted(email);
+		return ResponseEntity.ok(products);
+	}
+
+	// --- READ SINGLE ---
+	@GetMapping("/{id}")
+	@Operation(summary = "Geyim detalı və ağıllı ölçü tövsiyəsi")
+	public ResponseEntity<Map<String, Object>> getProductDetails(@PathVariable Long id,
+			@AuthenticationPrincipal Jwt jwt) {
+		String email = extractEmail(jwt);
 		Map<String, Object> details = productService.getProductDetailsWithRecommendation(id, email);
 		return ResponseEntity.ok(details);
 	}
