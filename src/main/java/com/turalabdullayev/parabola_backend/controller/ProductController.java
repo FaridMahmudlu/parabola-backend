@@ -1,13 +1,8 @@
 package com.turalabdullayev.parabola_backend.controller;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.turalabdullayev.parabola_backend.entity.Product;
 import com.turalabdullayev.parabola_backend.service.ProductService;
+import com.turalabdullayev.parabola_backend.service.SupabaseStorageService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -41,10 +37,11 @@ import java.util.ArrayList;
 public class ProductController {
 
 	private final ProductService productService;
-	private final String UPLOAD_DIR = "./uploads/";
+	private final SupabaseStorageService supabaseStorageService;
 
-	public ProductController(ProductService productService) {
+	public ProductController(ProductService productService, SupabaseStorageService supabaseStorageService) {
 		this.productService = productService;
+		this.supabaseStorageService = supabaseStorageService;
 	}
 
 	private String extractEmail(Jwt jwt) {
@@ -73,38 +70,8 @@ public class ProductController {
 				throw new IllegalArgumentException("Şəkil faylının ölçüsü 5MB-dan çox ola bilməz!");
 			}
 			
-			// Validate content type
-			String contentType = file.getContentType();
-			if (contentType == null || !contentType.startsWith("image/")) {
-				throw new IllegalArgumentException("Yalnız şəkil formatında fayl yükləyə bilərsiniz!");
-			}
-			
-			// Generate unique secure UUID filename
-			String originalFileName = file.getOriginalFilename();
-			String fileExtension = ".jpg";
-			if (originalFileName != null && originalFileName.contains(".")) {
-				String ext = originalFileName.substring(originalFileName.lastIndexOf(".")).toLowerCase();
-				if (ext.equals(".png") || ext.equals(".jpeg") || ext.equals(".jpg") || ext.equals(".webp") || ext.equals(".gif")) {
-					fileExtension = ext;
-				}
-			}
-			String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
-			
-			Path uploadPath = Paths.get(UPLOAD_DIR);
-			if (!Files.exists(uploadPath)) {
-				Files.createDirectories(uploadPath);
-			}
-			
-			// Normalize to prevent path traversal
-			Path filePath = uploadPath.resolve(uniqueFileName).normalize();
-			if (!filePath.startsWith(uploadPath.toAbsolutePath().normalize())) {
-				throw new SecurityException("Giriş qadağandır!");
-			}
-			
-			Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-			
-			String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
-			urls.add(backendUrl + "/uploads/" + uniqueFileName);
+			String imageUrl = supabaseStorageService.uploadFile(file);
+			urls.add(imageUrl);
 		}
 		return urls;
 	}

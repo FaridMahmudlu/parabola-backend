@@ -28,4 +28,4 @@ COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
 
 # Start the application with render profile
-ENTRYPOINT ["java", "-Dspring.profiles.active=render", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseSerialGC", "-Xms128m", "-Xmx256m", "-XX:MaxRAM=400m", "-Dspring.profiles.active=render", "-jar", "app.jar"]
