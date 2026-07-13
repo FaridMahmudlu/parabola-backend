@@ -48,7 +48,7 @@ public class ProductService {
 		if (product.getSizes() != null) {
 			for (ProductSize size : product.getSizes()) {
 				size.setProduct(product);
-				populateDimensionsFromFitAndManken(size);
+				setDefaultModelBodyType(size);
 			}
 		}
 		return productRepository.save(product);
@@ -88,7 +88,7 @@ public class ProductService {
 			existing.getSizes().clear();
 			for (ProductSize size : updatedData.getSizes()) {
 				size.setProduct(existing);
-				populateDimensionsFromFitAndManken(size);
+				setDefaultModelBodyType(size);
 				existing.getSizes().add(size);
 			}
 		}
@@ -164,16 +164,36 @@ public class ProductService {
 			}
 		}
 
-		// 3. Body dimensions match via SizeEngine (25 points)
-		if (user.getChest() != null && user.getShoulder() != null && product.getSizes() != null
-				&& !product.getSizes().isEmpty()) {
-			try {
-				SizeRecommendationResponse rec = sizeEngineService.calculateBestSize(user, product);
-				if (rec.getMatchPercentage() > 0) {
-					score += (rec.getMatchPercentage() / 100.0) * 25.0;
+		// 3. Body type & Fit match (25 points)
+		if (user.getBodyType() != null && product.getSizes() != null && !product.getSizes().isEmpty()) {
+			String userBody = user.getBodyType().trim().toLowerCase();
+			
+			for (ProductSize ps : product.getSizes()) {
+				String fit = ps.getClothingFit() != null ? ps.getClothingFit().trim().toLowerCase() : "orta";
+				boolean isPerfect = false;
+				boolean isCompatible = false;
+
+				if (userBody.contains("arıq") || userBody.contains("slim")) {
+					if (fit.contains("kiçik") || fit.contains("orta kiçik")) isPerfect = true;
+					else if (fit.contains("orta")) isCompatible = true;
+				} else if (userBody.contains("normal") || userBody.contains("regular")) {
+					if (fit.contains("orta")) isPerfect = true;
+					else if (fit.contains("orta kiçik") || fit.contains("orta geniş")) isCompatible = true;
+				} else if (userBody.contains("idman") || userBody.contains("athletic")) {
+					if (fit.contains("orta") || fit.contains("orta geniş")) isPerfect = true;
+					else if (fit.contains("geniş")) isCompatible = true;
+				} else if (userBody.contains("kilolu") || userBody.contains("heavy")) {
+					if (fit.contains("geniş")) isPerfect = true;
+					else if (fit.contains("orta geniş")) isCompatible = true;
 				}
-			} catch (Exception e) {
-				// Ignore calculation errors
+
+				if (isPerfect) {
+					score += 25.0;
+					break;
+				} else if (isCompatible) {
+					score += 18.0;
+					break;
+				}
 			}
 		}
 
@@ -206,69 +226,23 @@ public class ProductService {
 		return response;
 	}
 
-	private void populateDimensionsFromFitAndManken(ProductSize pSize) {
-		String size = pSize.getSizeName() != null ? pSize.getSizeName().trim().toUpperCase() : "M";
+	private void setDefaultModelBodyType(ProductSize pSize) {
 		String fit = pSize.getClothingFit() != null ? pSize.getClothingFit().trim() : "Orta";
 		String manken = pSize.getModelBodyType() != null ? pSize.getModelBodyType().trim() : "";
 
 		if (manken.isEmpty() || "Orta".equals(manken)) {
 			if (fit.contains("Kiçik")) {
-				manken = "Daha arıq";
+				manken = "Arıq";
 			} else if (fit.contains("Orta kiçik")) {
 				manken = "Arıq";
 			} else if (fit.contains("Orta geniş")) {
-				manken = "Orta iri";
+				manken = "Normal";
 			} else if (fit.contains("Geniş")) {
-				manken = "İri";
+				manken = "Kilolu";
 			} else {
-				manken = "Orta";
+				manken = "Normal";
 			}
 			pSize.setModelBodyType(manken);
 		}
-
-		double chest = 95.0;
-		double shoulder = 44.0;
-		double armLength = 60.0;
-		double totalLength = 70.0;
-
-		// 1. Base sizes mapping
-		if ("S".equals(size)) {
-			chest = 90.0; shoulder = 40.0; armLength = 59.0; totalLength = 68.0;
-		} else if ("M".equals(size)) {
-			chest = 98.0; shoulder = 43.0; armLength = 61.0; totalLength = 70.0;
-		} else if ("L".equals(size)) {
-			chest = 106.0; shoulder = 45.0; armLength = 63.0; totalLength = 72.0;
-		} else if ("XL".equals(size)) {
-			chest = 114.0; shoulder = 47.0; armLength = 65.0; totalLength = 74.0;
-		} else if ("XXL".equals(size)) {
-			chest = 122.0; shoulder = 49.0; armLength = 67.0; totalLength = 76.0;
-		}
-
-		// 2. Adjust based on Manken - Ölçü tipi
-		if (manken.contains("Daha arıq")) {
-			chest -= 4.0; shoulder -= 2.0;
-		} else if (manken.contains("Arıq")) {
-			chest -= 2.0; shoulder -= 1.0;
-		} else if (manken.contains("Orta iri")) {
-			chest += 2.0; shoulder += 1.0;
-		} else if (manken.contains("İri")) {
-			chest += 4.0; shoulder += 2.0;
-		}
-
-		// 3. Adjust based on Geyim (Fit)
-		if (fit.contains("Kiçik")) {
-			chest -= 3.0;
-		} else if (fit.contains("Orta kiçik")) {
-			chest -= 1.5;
-		} else if (fit.contains("Orta geniş")) {
-			chest += 2.0;
-		} else if (fit.contains("Geniş")) {
-			chest += 5.0;
-		}
-
-		pSize.setChest(chest);
-		pSize.setShoulder(shoulder);
-		pSize.setArmLength(armLength);
-		pSize.setTotalLength(totalLength);
 	}
 }

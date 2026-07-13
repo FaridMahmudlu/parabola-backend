@@ -11,9 +11,29 @@ import com.turalabdullayev.parabola_backend.entity.User;
 public class SizeEngineService {
 
 	public SizeRecommendationResponse calculateBestSize(User user, Product product) {
-		if (user.getChest() == null || user.getShoulder() == null || user.getArmLength() == null) {
+		if (user.getGender() == null || user.getGender().isBlank()
+				|| user.getClothingSize() == null || user.getClothingSize().isBlank()
+				|| user.getBodyType() == null || user.getBodyType().isBlank()) {
 			return new SizeRecommendationResponse("Təyin edilmədi", 0,
-					"Zəhmət olmasa əvvəlcə profilinizdə bədən ölçülərinizi tamamlayın.");
+					"Zəhmət olmasa əvvəlcə profilinizdə Cins, Ölçü və Bədən Tipi seçimlərinizi tamamlayın.");
+		}
+
+		if (product.getSizes() == null || product.getSizes().isEmpty()) {
+			return new SizeRecommendationResponse("Tapılmadı", 0,
+					"Bu geyim üçün ölçü məlumatları əlavə edilməyib.");
+		}
+
+		// Gender check
+		String userGender = user.getGender().trim().toLowerCase();
+		String prodGender = product.getGender() != null ? product.getGender().trim().toLowerCase() : "unisex";
+		
+		boolean genderMatch = userGender.contains("kiş") && prodGender.contains("kiş")
+				|| userGender.contains("qad") && prodGender.contains("qad")
+				|| prodGender.contains("unisex") || prodGender.contains("uni");
+
+		if (!genderMatch) {
+			return new SizeRecommendationResponse("Uyğun deyil", 0,
+					"Bu geyimin cinsi sizin profil seçimlərinizə uyğun gəlmir.");
 		}
 
 		ProductSize bestSize = null;
@@ -21,7 +41,6 @@ public class SizeEngineService {
 
 		for (ProductSize pSize : product.getSizes()) {
 			double currentScore = evaluateSizeMatch(user, pSize);
-
 			if (currentScore > highestScore) {
 				highestScore = currentScore;
 				bestSize = pSize;
@@ -30,43 +49,97 @@ public class SizeEngineService {
 
 		if (bestSize == null) {
 			return new SizeRecommendationResponse("Tapılmadı", 0,
-					"Təəssüf ki, bu geyimin ölçüləri sizin bədən quruluşunuza uyğun gəlmir.");
+					"Bədən quruluşunuza uyğun geyim ölçüsü tapılmadı.");
 		}
 
-		int finalPercentage = (int) Math.round(highestScore * 100);
-
-		String message = generateAzerbaijaniFeedback(user, bestSize, product.getCategory());
+		int finalPercentage = (int) Math.round(highestScore);
+		String message = generateFeedback(user, bestSize, product.getCategory());
 
 		return new SizeRecommendationResponse(bestSize.getSizeName(), finalPercentage, message);
 	}
 
-	private double evaluateSizeMatch(User user, ProductSize size) {
-		if (size.getChest() < user.getChest() || size.getShoulder() < user.getShoulder()) {
-			return 0.0;
+	private double evaluateSizeMatch(User user, ProductSize ps) {
+		String userSize = user.getClothingSize().trim().toUpperCase();
+		String prodSize = ps.getSizeName().trim().toUpperCase();
+		String userBody = user.getBodyType().trim().toLowerCase();
+		String fit = ps.getClothingFit() != null ? ps.getClothingFit().trim().toLowerCase() : "orta";
+
+		// Perfect size name match
+		if (userSize.equals(prodSize)) {
+			if (userBody.contains("arıq") || userBody.contains("slim")) {
+				if (fit.contains("kiçik") || fit.contains("orta kiçik")) return 100.0;
+				if (fit.contains("orta")) return 95.0;
+				if (fit.contains("orta geniş")) return 85.0;
+				return 75.0; // geniş
+			} else if (userBody.contains("normal") || userBody.contains("regular")) {
+				if (fit.contains("orta")) return 100.0;
+				if (fit.contains("orta kiçik") || fit.contains("orta geniş")) return 92.0;
+				return 80.0; // kiçik or geniş
+			} else if (userBody.contains("idman") || userBody.contains("athletic")) {
+				if (fit.contains("orta") || fit.contains("orta geniş")) return 100.0;
+				if (fit.contains("geniş")) return 90.0;
+				return 75.0; // kiçik or orta kiçik
+			} else { // kilolu / heavy
+				if (fit.contains("geniş")) return 100.0;
+				if (fit.contains("orta geniş")) return 85.0;
+				if (fit.contains("orta")) return 70.0;
+				return 40.0; // kiçik/orta kiçik
+			}
 		}
 
-		double chestDiff = Math.abs((size.getChest() - user.getChest()) - 5.0);
-		double shoulderDiff = Math.abs((size.getShoulder() - user.getShoulder()) - 2.0);
-		double armDiff = Math.abs((size.getArmLength() - user.getArmLength()) - 1.0);
+		// Adjacent size check (e.g. User wants M, product offers S or L)
+		int userIdx = getSizeIndex(userSize);
+		int prodIdx = getSizeIndex(prodSize);
+		
+		if (Math.abs(userIdx - prodIdx) == 1) {
+			// User is M, product is S
+			if (userIdx > prodIdx) {
+				if (fit.contains("geniş") || fit.contains("orta geniş")) return 80.0;
+				return 50.0;
+			}
+			// User is M, product is L
+			if (userIdx < prodIdx) {
+				if (fit.contains("kiçik") || fit.contains("orta kiçik")) return 80.0;
+				return 55.0;
+			}
+		}
 
-		double totalPenalty = (chestDiff * 0.5) + (shoulderDiff * 0.3) + (armDiff * 0.2);
-
-		double score = 1.0 - (totalPenalty / 20.0);
-		return Math.max(0.0, Math.min(1.0, score));
+		// Far sizes (e.g. S vs XL)
+		return 20.0;
 	}
 
-	private String generateAzerbaijaniFeedback(User user, ProductSize size, String category) {
-		StringBuilder sb = new StringBuilder();
-		sb.append(size.getSizeName()).append(" ölçüsü bu ").append(category.toLowerCase())
-				.append(" üçün sizə ən uyğun variantdır. ");
+	private int getSizeIndex(String size) {
+		switch (size) {
+			case "XS": return 0;
+			case "S": return 1;
+			case "M": return 2;
+			case "L": return 3;
+			case "XL": return 4;
+			case "XXL": return 5;
+			default: return 2;
+		}
+	}
 
-		double chestDiff = size.getChest() - user.getChest();
-		if (chestDiff <= 3) {
-			sb.append("Sinə hissəsi bədəninizi tam saracaq (Slim-fit). ");
-		} else if (chestDiff > 8) {
-			sb.append("Sinə hissəsi olduqca rahat və boş (Oversize) qalacaq. ");
+	private String generateFeedback(User user, ProductSize ps, String category) {
+		String userSize = user.getClothingSize().trim().toUpperCase();
+		String prodSize = ps.getSizeName().trim().toUpperCase();
+		String fit = ps.getClothingFit() != null ? ps.getClothingFit().trim().toLowerCase() : "orta";
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(ps.getSizeName()).append(" ölçüsü bu ").append(category.toLowerCase()).append(" üçün sizə məsləhət görülür. ");
+
+		if (userSize.equals(prodSize)) {
+			if (fit.contains("kiçik") || fit.contains("orta kiçik")) {
+				sb.append("Geyim kəsimi dar (Slim-fit) olduğu üçün bədəninizi zərif şəkildə saracaq.");
+			} else if (fit.contains("geniş") || fit.contains("orta geniş")) {
+				sb.append("Geyim kəsimi geniş (Oversized) olduğu üçün bədəninizdə rahat və boş qalacaq.");
+			} else {
+				sb.append("Standart (Regular-fit) kəsimi ilə bədəninizə ideal və tam rahat oturacaq.");
+			}
+		} else if (getSizeIndex(userSize) > getSizeIndex(prodSize)) {
+			sb.append("Normalda ").append(userSize).append(" geyinirsiniz, lakin bu məhsulun kəsimi geniş (Oversized) olduğu üçün sizə bir ölçü kiçik olan ").append(prodSize).append(" ölçüsü tam uyğun gələcək.");
 		} else {
-			sb.append("Sinə hissəsi ideal rahatlıqda oturacaq. ");
+			sb.append("Normalda ").append(userSize).append(" geyinirsiniz, lakin bu məhsulun kəsimi dar (Slim-fit) olduğu üçün sizə bir ölçü böyük olan ").append(prodSize).append(" ölçüsü daha rahat olacaq.");
 		}
 
 		return sb.toString();

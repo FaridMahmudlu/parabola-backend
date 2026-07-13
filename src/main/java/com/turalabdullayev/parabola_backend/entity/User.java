@@ -54,24 +54,6 @@ public class User {
 	@Column(name = "shop_name")
 	private String shopName;
 
-	@Column(name = "height_cm")
-	private Double height;
-
-	@Column(name = "weight_kq")
-	private Double weight;
-
-	@Column(name = "chest_cm")
-	private Double chest;
-
-	@Column(name = "arm_length_cm")
-	private Double armLength;
-
-	@Column(name = "waist_cm")
-	private Double waist;
-
-	@Column(name = "shoulder_cm")
-	private Double shoulder;
-
 	@Column(name = "created_at", updatable = false)
 	private LocalDateTime createdAt;
 

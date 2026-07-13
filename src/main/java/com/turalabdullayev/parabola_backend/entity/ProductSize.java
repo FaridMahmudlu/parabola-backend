@@ -32,17 +32,7 @@ public class ProductSize {
 	@Column(nullable = false)
 	private String sizeName;
 
-	@Column(name = "chest_cm")
-	private Double chest;
 
-	@Column(name = "arm_length_cm")
-	private Double armLength;
-
-	@Column(name = "shoulder_cm")
-	private Double shoulder;
-
-	@Column(name = "total_length_cm")
-	private Double totalLength;
 
 	@Column(name = "clothing_fit")
 	private String clothingFit;
