@@ -51,6 +51,9 @@ public class User {
 	@Column(name = "body_type")
 	private String bodyType;
 
+	@Column(name = "shop_name")
+	private String shopName;
+
 	@Column(name = "height_cm")
 	private Double height;
 

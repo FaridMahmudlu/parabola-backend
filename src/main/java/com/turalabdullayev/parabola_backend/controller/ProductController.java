@@ -32,6 +32,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.ArrayList;
+
 @RestController
 @RequestMapping("/api/v1/products")
 @Tag(name = "Product Controller", description = "Geyim Kataloqu və Ölçü Alqoritmi API-ları")
@@ -60,42 +62,78 @@ public class ProductController {
 		return email.contains("@") ? email.split("@")[0] : email;
 	}
 
-	private String uploadImage(MultipartFile file) throws IOException {
-		Path uploadPath = Paths.get(UPLOAD_DIR);
-		if (!Files.exists(uploadPath)) {
-			Files.createDirectories(uploadPath);
+	private List<String> uploadImages(List<MultipartFile> files) throws IOException {
+		List<String> urls = new ArrayList<>();
+		if (files == null) return urls;
+		for (MultipartFile file : files) {
+			if (file.isEmpty()) continue;
+			
+			// Validate file size (max 5MB)
+			if (file.getSize() > 5 * 1024 * 1024) {
+				throw new IllegalArgumentException("Şəkil faylının ölçüsü 5MB-dan çox ola bilməz!");
+			}
+			
+			// Validate content type
+			String contentType = file.getContentType();
+			if (contentType == null || !contentType.startsWith("image/")) {
+				throw new IllegalArgumentException("Yalnız şəkil formatında fayl yükləyə bilərsiniz!");
+			}
+			
+			// Generate unique secure UUID filename
+			String originalFileName = file.getOriginalFilename();
+			String fileExtension = ".jpg";
+			if (originalFileName != null && originalFileName.contains(".")) {
+				String ext = originalFileName.substring(originalFileName.lastIndexOf(".")).toLowerCase();
+				if (ext.equals(".png") || ext.equals(".jpeg") || ext.equals(".jpg") || ext.equals(".webp") || ext.equals(".gif")) {
+					fileExtension = ext;
+				}
+			}
+			String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
+			
+			Path uploadPath = Paths.get(UPLOAD_DIR);
+			if (!Files.exists(uploadPath)) {
+				Files.createDirectories(uploadPath);
+			}
+			
+			// Normalize to prevent path traversal
+			Path filePath = uploadPath.resolve(uniqueFileName).normalize();
+			if (!filePath.startsWith(uploadPath.toAbsolutePath().normalize())) {
+				throw new SecurityException("Giriş qadağandır!");
+			}
+			
+			Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+			
+			String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
+			urls.add(backendUrl + "/uploads/" + uniqueFileName);
 		}
-		String originalFileName = file.getOriginalFilename();
-		String fileExtension = originalFileName != null ? originalFileName.substring(originalFileName.lastIndexOf("."))
-				: ".jpg";
-		String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
-		Path filePath = uploadPath.resolve(uniqueFileName);
-		Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-		String backendUrl = System.getenv("BACKEND_URL") != null ? System.getenv("BACKEND_URL") : "http://localhost:8080";
-		return backendUrl + "/uploads/" + uniqueFileName;
+		return urls;
 	}
 
 	// --- CREATE ---
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize("hasRole('SELLER')")
 	@Operation(summary = "Yeni geyim əlavə et (Satıcı)")
-	public ResponseEntity<Product> createProduct(
+	public ResponseEntity<?> createProduct(
 			@RequestPart("product") String productJson,
-			@RequestPart("image") MultipartFile file,
-			@AuthenticationPrincipal Jwt jwt) throws IOException {
+			@RequestPart("images") List<MultipartFile> files,
+			@AuthenticationPrincipal Jwt jwt) {
+		try {
+			ObjectMapper objectMapper = new ObjectMapper();
+			Product product = objectMapper.readValue(productJson, Product.class);
 
-		ObjectMapper objectMapper = new ObjectMapper();
-		Product product = objectMapper.readValue(productJson, Product.class);
+			List<String> fileUrls = uploadImages(files);
+			product.setImageUrls(fileUrls);
 
-		String fileUrl = uploadImage(file);
-		product.setImageUrl(fileUrl);
+			String sellerEmail = extractEmail(jwt);
+			String sellerName = extractUsername(jwt);
 
-		String sellerEmail = extractEmail(jwt);
-		String sellerName = extractUsername(jwt);
-
-		Product savedProduct = productService.saveProduct(product, sellerEmail, sellerName);
-		return ResponseEntity.ok(savedProduct);
+			Product savedProduct = productService.saveProduct(product, sellerEmail, sellerName);
+			return ResponseEntity.ok(savedProduct);
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+		} catch (Exception e) {
+			return ResponseEntity.internalServerError().body(Map.of("message", "Xəta baş verdi: " + e.getMessage()));
+		}
 	}
 
 	// --- READ: Satıcının öz məhsulları ---
@@ -115,24 +153,26 @@ public class ProductController {
 	public ResponseEntity<?> updateProduct(
 			@PathVariable Long id,
 			@RequestPart("product") String productJson,
-			@RequestPart(value = "image", required = false) MultipartFile file,
+			@RequestPart(value = "images", required = false) List<MultipartFile> files,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
 			ObjectMapper objectMapper = new ObjectMapper();
 			Product updatedData = objectMapper.readValue(productJson, Product.class);
 
-			if (file != null && !file.isEmpty()) {
-				String fileUrl = uploadImage(file);
-				updatedData.setImageUrl(fileUrl);
+			if (files != null && !files.isEmpty() && !(files.size() == 1 && files.get(0).getOriginalFilename() != null && files.get(0).getOriginalFilename().equals("empty"))) {
+				List<String> fileUrls = uploadImages(files);
+				updatedData.setImageUrls(fileUrls);
 			}
 
 			String sellerEmail = extractEmail(jwt);
 			Product updated = productService.updateProduct(id, updatedData, sellerEmail);
 			return ResponseEntity.ok(updated);
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
 		} catch (RuntimeException e) {
 			return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
-		} catch (IOException e) {
-			return ResponseEntity.status(500).body(Map.of("message", "Şəkil yüklənərkən xəta baş verdi."));
+		} catch (Exception e) {
+			return ResponseEntity.status(500).body(Map.of("message", "Şəkillər yenilənərkən xəta baş verdi: " + e.getMessage()));
 		}
 	}
 

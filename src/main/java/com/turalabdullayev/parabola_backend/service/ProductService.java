@@ -33,7 +33,18 @@ public class ProductService {
 	// --- CREATE ---
 	public Product saveProduct(Product product, String sellerEmail, String sellerName) {
 		product.setSellerEmail(sellerEmail);
-		product.setSellerName(sellerName);
+		
+		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
+		if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
+			product.setSellerName(sellerOpt.get().getShopName());
+		} else {
+			product.setSellerName(sellerName);
+		}
+
+		if (product.getImageUrls() != null && !product.getImageUrls().isEmpty()) {
+			product.setImageUrl(product.getImageUrls().get(0));
+		}
+
 		if (product.getSizes() != null) {
 			for (ProductSize size : product.getSizes()) {
 				size.setProduct(product);
@@ -67,8 +78,9 @@ public class ProductService {
 		existing.setStyle(updatedData.getStyle());
 		existing.setDescription(updatedData.getDescription());
 
-		if (updatedData.getImageUrl() != null && !updatedData.getImageUrl().isBlank()) {
-			existing.setImageUrl(updatedData.getImageUrl());
+		if (updatedData.getImageUrls() != null && !updatedData.getImageUrls().isEmpty()) {
+			existing.setImageUrls(updatedData.getImageUrls());
+			existing.setImageUrl(updatedData.getImageUrls().get(0));
 		}
 
 		// Update sizes

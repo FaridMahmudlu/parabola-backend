@@ -4,15 +4,20 @@ import org.springframework.stereotype.Service;
 
 import com.turalabdullayev.parabola_backend.dto.UserProfileUpdateRequest;
 import com.turalabdullayev.parabola_backend.entity.User;
+import com.turalabdullayev.parabola_backend.entity.Product;
 import com.turalabdullayev.parabola_backend.repository.UserRepository;
+import com.turalabdullayev.parabola_backend.repository.ProductRepository;
+import java.util.List;
 
 @Service
 public class UserService {
 
 	private final UserRepository userRepository;
+	private final ProductRepository productRepository;
 
-	public UserService(UserRepository userRepository) {
+	public UserService(UserRepository userRepository, ProductRepository productRepository) {
 		this.userRepository = userRepository;
+		this.productRepository = productRepository;
 	}
 
 	public User getProfileOrOrCreate(String email, String roleName) {
@@ -55,15 +60,28 @@ public class UserService {
 		String gender = request.getGender();
 		String clothingSize = request.getClothingSize();
 		String bodyType = request.getBodyType();
+		String shopName = request.getShopName();
 
 		user.setGender(gender);
 		user.setClothingSize(clothingSize);
 		user.setBodyType(bodyType);
+		user.setShopName(shopName);
 
 		// Estimate physical dimensions based on Cins, Geyim Ölçüsü, Bədən Tipi
 		estimateAndSetDimensions(user, gender, clothingSize, bodyType);
 
 		userRepository.save(user);
+
+		// If user is a seller and has updated their shop name, sync all their products
+		if (user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && shopName != null && !shopName.isBlank()) {
+			List<Product> products = productRepository.findBySellerEmail(email);
+			if (products != null && !products.isEmpty()) {
+				for (Product p : products) {
+					p.setSellerName(shopName);
+				}
+				productRepository.saveAll(products);
+			}
+		}
 
 		return "Profil məlumatlarınız və bədən ölçüləriniz uğurla yadda saxlanıldı!";
 	}

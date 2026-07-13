@@ -16,4 +16,6 @@ public class UserProfileUpdateRequest {
 
 	@NotBlank(message = "Bədən tipi seçilməlidir")
 	private String bodyType;
+
+	private String shopName;
 }
