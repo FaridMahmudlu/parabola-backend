@@ -6,7 +6,6 @@ import java.util.Map;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,8 +20,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.turalabdullayev.parabola_backend.entity.Product;
+import com.turalabdullayev.parabola_backend.entity.User;
+import com.turalabdullayev.parabola_backend.entity.Role;
 import com.turalabdullayev.parabola_backend.service.ProductService;
 import com.turalabdullayev.parabola_backend.service.SupabaseStorageService;
+import com.turalabdullayev.parabola_backend.service.UserService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -38,10 +40,12 @@ public class ProductController {
 
 	private final ProductService productService;
 	private final SupabaseStorageService supabaseStorageService;
+	private final UserService userService;
 
-	public ProductController(ProductService productService, SupabaseStorageService supabaseStorageService) {
+	public ProductController(ProductService productService, SupabaseStorageService supabaseStorageService, UserService userService) {
 		this.productService = productService;
 		this.supabaseStorageService = supabaseStorageService;
+		this.userService = userService;
 	}
 
 	private String extractEmail(Jwt jwt) {
@@ -78,20 +82,26 @@ public class ProductController {
 
 	// --- CREATE ---
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	@PreAuthorize("hasRole('SELLER')")
 	@Operation(summary = "Yeni geyim əlavə et (Satıcı)")
 	public ResponseEntity<?> createProduct(
 			@RequestPart("product") String productJson,
 			@RequestPart("images") List<MultipartFile> files,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
+			String sellerEmail = extractEmail(jwt);
+			
+			// Database role check
+			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			if (user.getRole() != Role.ROLE_SELLER) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul əlavə edə bilər."));
+			}
+
 			ObjectMapper objectMapper = new ObjectMapper();
 			Product product = objectMapper.readValue(productJson, Product.class);
 
 			List<String> fileUrls = uploadImages(files);
 			product.setImageUrls(fileUrls);
 
-			String sellerEmail = extractEmail(jwt);
 			String sellerName = extractUsername(jwt);
 
 			Product savedProduct = productService.saveProduct(product, sellerEmail, sellerName);
@@ -105,17 +115,22 @@ public class ProductController {
 
 	// --- READ: Satıcının öz məhsulları ---
 	@GetMapping("/my")
-	@PreAuthorize("hasRole('SELLER')")
 	@Operation(summary = "Satıcının öz məhsullarını gətir")
-	public ResponseEntity<List<Product>> getMyProducts(@AuthenticationPrincipal Jwt jwt) {
+	public ResponseEntity<?> getMyProducts(@AuthenticationPrincipal Jwt jwt) {
 		String sellerEmail = extractEmail(jwt);
+		
+		// Database role check
+		User user = userService.getProfileOrOrCreate(sellerEmail, null);
+		if (user.getRole() != Role.ROLE_SELLER) {
+			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsullarını görə bilər."));
+		}
+
 		List<Product> products = productService.getProductsBySeller(sellerEmail);
 		return ResponseEntity.ok(products);
 	}
 
 	// --- UPDATE ---
 	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	@PreAuthorize("hasRole('SELLER')")
 	@Operation(summary = "Məhsulu redaktə et (Satıcı)")
 	public ResponseEntity<?> updateProduct(
 			@PathVariable Long id,
@@ -123,6 +138,14 @@ public class ProductController {
 			@RequestPart(value = "images", required = false) List<MultipartFile> files,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
+			String sellerEmail = extractEmail(jwt);
+			
+			// Database role check
+			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			if (user.getRole() != Role.ROLE_SELLER) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul yeniləyə bilər."));
+			}
+
 			ObjectMapper objectMapper = new ObjectMapper();
 			Product updatedData = objectMapper.readValue(productJson, Product.class);
 
@@ -131,7 +154,6 @@ public class ProductController {
 				updatedData.setImageUrls(fileUrls);
 			}
 
-			String sellerEmail = extractEmail(jwt);
 			Product updated = productService.updateProduct(id, updatedData, sellerEmail);
 			return ResponseEntity.ok(updated);
 		} catch (IllegalArgumentException e) {
@@ -145,11 +167,17 @@ public class ProductController {
 
 	// --- DELETE ---
 	@DeleteMapping("/{id}")
-	@PreAuthorize("hasRole('SELLER')")
 	@Operation(summary = "Məhsulu sil (Satıcı)")
 	public ResponseEntity<?> deleteProduct(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
 		try {
 			String sellerEmail = extractEmail(jwt);
+			
+			// Database role check
+			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			if (user.getRole() != Role.ROLE_SELLER) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul silə bilər."));
+			}
+
 			productService.deleteProduct(id, sellerEmail);
 			return ResponseEntity.ok(Map.of("message", "Məhsul uğurla silindi!"));
 		} catch (RuntimeException e) {

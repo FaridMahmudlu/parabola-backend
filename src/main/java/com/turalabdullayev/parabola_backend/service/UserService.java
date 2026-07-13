@@ -46,9 +46,12 @@ public class UserService {
 					return userRepository.save(newUser);
 				});
 
-		if (user.getRole() != finalRole) {
-			user.setRole(finalRole);
-			user = userRepository.save(user);
+		// Only update role if explicitly provided in JWT token
+		if (roleName != null) {
+			if (user.getRole() != finalRole) {
+				user.setRole(finalRole);
+				user = userRepository.save(user);
+			}
 		}
 
 		return user;
@@ -66,6 +69,13 @@ public class UserService {
 		user.setClothingSize(clothingSize);
 		user.setBodyType(bodyType);
 		user.setShopName(shopName);
+
+		// If user has updated their shop name, they are a seller
+		if (shopName != null && !shopName.isBlank()) {
+			user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
+		} else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+			user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER);
+		}
 
 		userRepository.save(user);
 
