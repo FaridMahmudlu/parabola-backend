@@ -197,7 +197,7 @@ public class ProductController {
 	@GetMapping
 	@Operation(summary = "Bütün geyimləri uyğunluq sırası ilə gətir")
 	public ResponseEntity<List<Product>> getAllProducts(@AuthenticationPrincipal Jwt jwt) {
-		String email = extractEmail(jwt);
+		String email = jwt != null ? extractEmail(jwt) : null;
 		List<Product> products = productService.getAllProductsSorted(email);
 		return ResponseEntity.ok(products);
 	}
