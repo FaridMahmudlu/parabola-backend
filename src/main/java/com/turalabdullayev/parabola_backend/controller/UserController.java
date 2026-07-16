@@ -51,7 +51,7 @@ public class UserController {
 			email = jwt.getSubject() + "@clerk.local";
 		}
 		String roleName = jwt.getClaimAsString("role");
-		User user = userService.getProfileOrOrCreate(email, roleName);
+		User user = userService.getProfileOrOrCreate(email, jwt.getSubject(), roleName);
 		return ResponseEntity.ok(user);
 	}
 }

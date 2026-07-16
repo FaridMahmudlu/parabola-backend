@@ -14,13 +14,15 @@ public class UserService {
 
 	private final UserRepository userRepository;
 	private final ProductRepository productRepository;
+	private final ClerkService clerkService;
 
-	public UserService(UserRepository userRepository, ProductRepository productRepository) {
+	public UserService(UserRepository userRepository, ProductRepository productRepository, ClerkService clerkService) {
 		this.userRepository = userRepository;
 		this.productRepository = productRepository;
+		this.clerkService = clerkService;
 	}
 
-	public User getProfileOrOrCreate(String email, String roleName) {
+	public User getProfileOrOrCreate(String email, String clerkUserId, String roleName) {
 		com.turalabdullayev.parabola_backend.entity.Role dbRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
 		if (roleName != null) {
 			try {
@@ -53,12 +55,20 @@ public class UserService {
 				user = userRepository.save(user);
 			}
 		}
+		// If no role in JWT, but user is not ROLE_SELLER in DB, check Clerk API
+		else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && clerkUserId != null) {
+			String clerkRole = clerkService.getUserRole(clerkUserId);
+			if ("ROLE_SELLER".equals(clerkRole) || "SELLER".equals(clerkRole)) {
+				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
+				user = userRepository.save(user);
+			}
+		}
 
 		return user;
 	}
 
 	public String updateProfileWithRole(String email, String roleName, UserProfileUpdateRequest request) {
-		User user = getProfileOrOrCreate(email, roleName);
+		User user = getProfileOrOrCreate(email, null, roleName);
 
 		String gender = request.getGender();
 		String clothingSize = request.getClothingSize();

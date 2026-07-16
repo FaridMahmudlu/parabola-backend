@@ -91,7 +91,7 @@ public class ProductController {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul əlavə edə bilər."));
 			}
@@ -120,7 +120,7 @@ public class ProductController {
 		String sellerEmail = extractEmail(jwt);
 		
 		// Database role check
-		User user = userService.getProfileOrOrCreate(sellerEmail, null);
+		User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
 		if (user.getRole() != Role.ROLE_SELLER) {
 			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsullarını görə bilər."));
 		}
@@ -141,7 +141,7 @@ public class ProductController {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul yeniləyə bilər."));
 			}
@@ -173,7 +173,7 @@ public class ProductController {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul silə bilər."));
 			}
