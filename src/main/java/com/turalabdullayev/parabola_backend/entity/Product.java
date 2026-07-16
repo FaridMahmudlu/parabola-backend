@@ -57,6 +57,9 @@ public class Product {
 
 	private String contactLink;
 
+	@Column(name = "contact_phone")
+	private String contactPhone;
+
 	private String gender;
 
 	private String color;

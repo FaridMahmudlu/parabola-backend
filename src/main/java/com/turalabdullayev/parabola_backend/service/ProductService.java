@@ -32,6 +32,11 @@ public class ProductService {
 
 	// --- CREATE ---
 	public Product saveProduct(Product product, String sellerEmail, String sellerName) {
+		if ((product.getContactLink() == null || product.getContactLink().isBlank()) && 
+			(product.getContactPhone() == null || product.getContactPhone().isBlank())) {
+			throw new IllegalArgumentException("Ən azı bir əlaqə vasitəsi (Telefon nömrəsi və ya İnstagram/TikTok linki) daxil edilməlidir!");
+		}
+
 		product.setSellerEmail(sellerEmail);
 		
 		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
@@ -61,6 +66,11 @@ public class ProductService {
 
 	// --- UPDATE ---
 	public Product updateProduct(Long id, Product updatedData, String sellerEmail) {
+		if ((updatedData.getContactLink() == null || updatedData.getContactLink().isBlank()) && 
+			(updatedData.getContactPhone() == null || updatedData.getContactPhone().isBlank())) {
+			throw new IllegalArgumentException("Ən azı bir əlaqə vasitəsi (Telefon nömrəsi və ya İnstagram/TikTok linki) daxil edilməlidir!");
+		}
+
 		Product existing = productRepository.findById(id)
 				.orElseThrow(() -> new RuntimeException("Məhsul tapılmadı!"));
 
@@ -73,6 +83,7 @@ public class ProductService {
 		existing.setCategory(updatedData.getCategory());
 		existing.setPrice(updatedData.getPrice());
 		existing.setContactLink(updatedData.getContactLink());
+		existing.setContactPhone(updatedData.getContactPhone());
 		existing.setGender(updatedData.getGender());
 		existing.setColor(updatedData.getColor());
 		existing.setStyle(updatedData.getStyle());
