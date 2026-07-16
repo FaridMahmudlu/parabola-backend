@@ -6,6 +6,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,24 +34,27 @@ public class UserController {
 	@PutMapping("/profile")
 	@Operation(summary = "Profil və bədən ölçülərini yenilə variantı", description = "Giriş etmiş istifadəçinin Azərbaycan dilindəki boy, çəki və digər bədən ölçülərini bazada yeniləyir.")
 	public ResponseEntity<String> updateProfile(@AuthenticationPrincipal Jwt jwt,
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
 			@Valid @RequestBody UserProfileUpdateRequest request) {
 		String email = jwt.getClaimAsString("email");
 		if (email == null || email.isBlank()) {
 			email = jwt.getSubject() + "@clerk.local";
 		}
-		String roleName = jwt.getClaimAsString("role");
+		String roleName = clerkRole != null && !clerkRole.isBlank() ? clerkRole : jwt.getClaimAsString("role");
 		String result = userService.updateProfileWithRole(email, roleName, request);
 		return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/profile")
 	@Operation(summary = "Cari istifadəçinin profil məlumatlarını gətir", description = "Token sahibinin bütün profil və bədən ölçüsü məlumatlarını geri qaytarır.")
-	public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
+	public ResponseEntity<User> getMyProfile(
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@AuthenticationPrincipal Jwt jwt) {
 		String email = jwt.getClaimAsString("email");
 		if (email == null || email.isBlank()) {
 			email = jwt.getSubject() + "@clerk.local";
 		}
-		String roleName = jwt.getClaimAsString("role");
+		String roleName = clerkRole != null && !clerkRole.isBlank() ? clerkRole : jwt.getClaimAsString("role");
 		User user = userService.getProfileOrOrCreate(email, jwt.getSubject(), roleName);
 		return ResponseEntity.ok(user);
 	}

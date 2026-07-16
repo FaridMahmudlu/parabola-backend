@@ -72,7 +72,7 @@ public class Product {
 	@Column(length = 1000)
 	private String description;
 
-	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
 	@JsonManagedReference
 	@Builder.Default
 	private List<ProductSize> sizes = new ArrayList<>();

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -86,12 +87,13 @@ public class ProductController {
 	public ResponseEntity<?> createProduct(
 			@RequestPart("product") String productJson,
 			@RequestPart("images") List<MultipartFile> files,
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul əlavə edə bilər."));
 			}
@@ -116,11 +118,13 @@ public class ProductController {
 	// --- READ: Satıcının öz məhsulları ---
 	@GetMapping("/my")
 	@Operation(summary = "Satıcının öz məhsullarını gətir")
-	public ResponseEntity<?> getMyProducts(@AuthenticationPrincipal Jwt jwt) {
+	public ResponseEntity<?> getMyProducts(
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@AuthenticationPrincipal Jwt jwt) {
 		String sellerEmail = extractEmail(jwt);
 		
 		// Database role check
-		User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
+		User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
 		if (user.getRole() != Role.ROLE_SELLER) {
 			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsullarını görə bilər."));
 		}
@@ -136,12 +140,13 @@ public class ProductController {
 			@PathVariable Long id,
 			@RequestPart("product") String productJson,
 			@RequestPart(value = "images", required = false) List<MultipartFile> files,
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul yeniləyə bilər."));
 			}
@@ -168,12 +173,15 @@ public class ProductController {
 	// --- DELETE ---
 	@DeleteMapping("/{id}")
 	@Operation(summary = "Məhsulu sil (Satıcı)")
-	public ResponseEntity<?> deleteProduct(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+	public ResponseEntity<?> deleteProduct(
+			@PathVariable Long id,
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@AuthenticationPrincipal Jwt jwt) {
 		try {
 			String sellerEmail = extractEmail(jwt);
 			
 			// Database role check
-			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), null);
+			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
 			if (user.getRole() != Role.ROLE_SELLER) {
 				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul silə bilər."));
 			}
