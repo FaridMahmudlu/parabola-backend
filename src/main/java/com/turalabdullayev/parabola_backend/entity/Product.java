@@ -2,6 +2,8 @@ package com.turalabdullayev.parabola_backend.entity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
@@ -78,5 +80,5 @@ public class Product {
 	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
 	@JsonManagedReference
 	@Builder.Default
-	private List<ProductSize> sizes = new ArrayList<>();
+	private Set<ProductSize> sizes = new LinkedHashSet<>();
 }
