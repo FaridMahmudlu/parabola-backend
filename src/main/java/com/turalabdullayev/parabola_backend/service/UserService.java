@@ -75,6 +75,14 @@ public class UserService {
 		String bodyType = request.getBodyType();
 		String shopName = request.getShopName();
 
+		boolean isUserSeller = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER 
+				|| "ROLE_SELLER".equalsIgnoreCase(roleName) 
+				|| "SELLER".equalsIgnoreCase(roleName);
+
+		if (isUserSeller && (shopName == null || shopName.isBlank())) {
+			throw new IllegalArgumentException("Satıcılar üçün Mağaza adı mütləq daxil edilməlidir!");
+		}
+
 		user.setGender(gender);
 		user.setClothingSize(clothingSize);
 		user.setBodyType(bodyType);

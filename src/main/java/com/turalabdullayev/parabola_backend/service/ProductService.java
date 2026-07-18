@@ -40,11 +40,10 @@ public class ProductService {
 		product.setSellerEmail(sellerEmail);
 		
 		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
-		if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
-			product.setSellerName(sellerOpt.get().getShopName());
-		} else {
-			product.setSellerName(sellerName);
+		if (sellerOpt.isEmpty() || sellerOpt.get().getShopName() == null || sellerOpt.get().getShopName().isBlank()) {
+			throw new IllegalArgumentException("Məhsul yarada bilmək üçün profilinizdə mütləq Mağaza Adı daxil etməlisiniz!");
 		}
+		product.setSellerName(sellerOpt.get().getShopName());
 
 		if (product.getImageUrls() != null && !product.getImageUrls().isEmpty()) {
 			product.setImageUrl(product.getImageUrls().get(0));
@@ -71,6 +70,11 @@ public class ProductService {
 			throw new IllegalArgumentException("Ən azı bir əlaqə vasitəsi (Telefon nömrəsi və ya İnstagram/TikTok linki) daxil edilməlidir!");
 		}
 
+		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
+		if (sellerOpt.isEmpty() || sellerOpt.get().getShopName() == null || sellerOpt.get().getShopName().isBlank()) {
+			throw new IllegalArgumentException("Məhsul redaktə edə bilmək üçün profilinizdə mütləq Mağaza Adı daxil etməlisiniz!");
+		}
+
 		Product existing = productRepository.findById(id)
 				.orElseThrow(() -> new RuntimeException("Məhsul tapılmadı!"));
 
@@ -78,6 +82,7 @@ public class ProductService {
 			throw new RuntimeException("Bu məhsul sizə aid deyil! Yalnız öz məhsullarınızı redaktə edə bilərsiniz.");
 		}
 
+		existing.setSellerName(sellerOpt.get().getShopName());
 		existing.setName(updatedData.getName());
 		existing.setBrand(updatedData.getBrand());
 		existing.setCategory(updatedData.getCategory());
