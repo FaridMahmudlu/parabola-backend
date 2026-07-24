@@ -16,7 +16,7 @@ public class ClerkService {
 
 	private final RestTemplate restTemplate;
 
-	@Value("${clerk.secret-key:${CLERK_SECRET_KEY:sk_test_6yj8K8ql1MgpG1V4OzD2o8cPwfrjGNwsh9uL9nXdWt}}")
+	@Value("${clerk.secret-key:${CLERK_SECRET_KEY:sk_test_wGOtJh1PklqzHNbXCjH1CT3MIWPo2GaUQKCP20Et1z}}")
 	private String clerkSecretKey;
 
 	public ClerkService() {
@@ -31,7 +31,7 @@ public class ClerkService {
 		if (clerkSecretKey != null && !clerkSecretKey.isBlank()) {
 			return clerkSecretKey.trim();
 		}
-		return "sk_test_6yj8K8ql1MgpG1V4OzD2o8cPwfrjGNwsh9uL9nXdWt";
+		return "sk_test_wGOtJh1PklqzHNbXCjH1CT3MIWPo2GaUQKCP20Et1z";
 	}
 
 	public String getUserRole(String clerkUserId) {
