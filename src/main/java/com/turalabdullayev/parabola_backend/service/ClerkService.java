@@ -118,4 +118,26 @@ public class ClerkService {
 		}
 		return null;
 	}
+
+	public java.util.List<Map<String, Object>> getClerkUsersList() {
+		try {
+			String url = "https://api.clerk.com/v1/users?limit=500";
+			HttpHeaders headers = new HttpHeaders();
+			headers.setBearerAuth(clerkSecretKey);
+			HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+			ResponseEntity<java.util.List<Map<String, Object>>> response = restTemplate.exchange(
+				url,
+				HttpMethod.GET,
+				entity,
+				new ParameterizedTypeReference<java.util.List<Map<String, Object>>>() {}
+			);
+			if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+				return response.getBody();
+			}
+		} catch (Exception e) {
+			System.err.println("Error fetching user list from Clerk API: " + e.getMessage());
+		}
+		return java.util.Collections.emptyList();
+	}
 }

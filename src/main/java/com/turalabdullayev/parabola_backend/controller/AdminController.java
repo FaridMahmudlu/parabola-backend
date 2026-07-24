@@ -108,14 +108,124 @@ public class AdminController {
 		if (jwt == null) {
 			return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
 		}
-		String email = extractEmail(jwt, headerEmail);
-		User user = userService.getProfileOrOrCreate(email, jwt.getSubject(), clerkRole);
-		if (!isAdmin(user, jwt, clerkRole, headerEmail)) {
+		String reqEmail = extractEmail(jwt, headerEmail);
+		User reqUser = userService.getProfileOrOrCreate(reqEmail, jwt.getSubject(), clerkRole);
+		if (!isAdmin(reqUser, jwt, clerkRole, headerEmail)) {
 			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız idarəçilər istifadəçi siyahısına baxa bilər."));
 		}
 
-		List<User> users = userService.getAllUsers();
-		return ResponseEntity.ok(users);
+		List<Map<String, Object>> clerkUsers = clerkService.getClerkUsersList();
+		List<User> dbUsers = userService.getAllUsers();
+		Map<String, User> dbUsersByEmail = new java.util.HashMap<>();
+		for (User u : dbUsers) {
+			if (u.getEmail() != null) {
+				dbUsersByEmail.put(u.getEmail().toLowerCase().trim(), u);
+			}
+		}
+
+		List<Map<String, Object>> responseList = new java.util.ArrayList<>();
+
+		if (clerkUsers != null && !clerkUsers.isEmpty()) {
+			for (Map<String, Object> clerkUser : clerkUsers) {
+				String clerkId = (String) clerkUser.get("id");
+				
+				// Extract primary email
+				String primaryEmail = null;
+				@SuppressWarnings("unchecked")
+				List<Map<String, Object>> emails = (List<Map<String, Object>>) clerkUser.get("email_addresses");
+				if (emails != null && !emails.isEmpty()) {
+					String primaryId = (String) clerkUser.get("primary_email_address_id");
+					if (primaryId != null) {
+						for (Map<String, Object> eObj : emails) {
+							if (primaryId.equals(eObj.get("id"))) {
+								primaryEmail = (String) eObj.get("email_address");
+								break;
+							}
+						}
+					}
+					if (primaryEmail == null) {
+						primaryEmail = (String) emails.get(0).get("email_address");
+					}
+				}
+
+				if (primaryEmail == null || primaryEmail.isBlank()) {
+					primaryEmail = clerkId + "@clerk.local";
+				}
+
+				String cleanEmail = primaryEmail.toLowerCase().trim();
+
+				// Extract Name / Username
+				String firstName = (String) clerkUser.get("first_name");
+				String lastName = (String) clerkUser.get("last_name");
+				String username = (String) clerkUser.get("username");
+				String displayName = "";
+
+				if (firstName != null && !firstName.isBlank()) {
+					displayName = firstName + (lastName != null && !lastName.isBlank() ? " " + lastName : "");
+				} else if (username != null && !username.isBlank()) {
+					displayName = username;
+				} else {
+					displayName = cleanEmail.contains("@") ? cleanEmail.split("@")[0] : cleanEmail;
+				}
+
+				// Extract Role
+				String userRole = "ROLE_USER";
+				if (ALLOWED_ADMIN_EMAILS.contains(cleanEmail)) {
+					userRole = "ROLE_ADMIN";
+				} else {
+					@SuppressWarnings("unchecked")
+					Map<String, Object> meta = (Map<String, Object>) clerkUser.get("public_metadata");
+					if (meta != null && meta.get("role") != null) {
+						userRole = (String) meta.get("role");
+					}
+				}
+
+				// Sync with DB
+				User matchedDbUser = dbUsersByEmail.get(cleanEmail);
+				if (matchedDbUser == null) {
+					matchedDbUser = userService.getProfileOrOrCreate(cleanEmail, clerkId, userRole);
+				} else {
+					if (!displayName.equals(matchedDbUser.getUsername())) {
+						matchedDbUser.setUsername(displayName);
+					}
+					if (ALLOWED_ADMIN_EMAILS.contains(cleanEmail) && matchedDbUser.getRole() != Role.ROLE_ADMIN) {
+						matchedDbUser.setRole(Role.ROLE_ADMIN);
+						userService.updateUserRoleByAdmin(matchedDbUser.getId(), "ROLE_ADMIN", clerkId);
+					}
+				}
+
+				if (matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank() && !"ROLE_ADMIN".equals(userRole)) {
+					userRole = "ROLE_SELLER";
+				}
+
+				Map<String, Object> userDto = new java.util.HashMap<>();
+				userDto.put("id", matchedDbUser.getId());
+				userDto.put("clerkId", clerkId);
+				userDto.put("username", displayName);
+				userDto.put("email", cleanEmail);
+				userDto.put("role", userRole);
+				userDto.put("shopName", matchedDbUser.getShopName());
+
+				responseList.add(userDto);
+			}
+		} else {
+			// Fallback to DB users
+			for (User u : dbUsers) {
+				String roleStr = u.getRole() != null ? u.getRole().name() : "ROLE_USER";
+				if (u.getEmail() != null && ALLOWED_ADMIN_EMAILS.contains(u.getEmail().toLowerCase().trim())) {
+					roleStr = "ROLE_ADMIN";
+				}
+				Map<String, Object> userDto = new java.util.HashMap<>();
+				userDto.put("id", u.getId());
+				userDto.put("username", u.getUsername());
+				userDto.put("email", u.getEmail());
+				userDto.put("role", roleStr);
+				userDto.put("shopName", u.getShopName());
+				responseList.add(userDto);
+			}
+		}
+
+		return ResponseEntity.ok(responseList);
 	}
 
 	@PutMapping("/users/{userId}/role")
@@ -142,7 +252,15 @@ public class AdminController {
 
 		try {
 			User updatedUser = userService.updateUserRoleByAdmin(userId, newRole, jwt.getSubject());
-			return ResponseEntity.ok(updatedUser);
+			
+			Map<String, Object> userDto = new java.util.HashMap<>();
+			userDto.put("id", updatedUser.getId());
+			userDto.put("username", updatedUser.getUsername());
+			userDto.put("email", updatedUser.getEmail());
+			userDto.put("role", updatedUser.getRole().name());
+			userDto.put("shopName", updatedUser.getShopName());
+
+			return ResponseEntity.ok(userDto);
 		} catch (IllegalArgumentException e) {
 			return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
 		} catch (Exception e) {
