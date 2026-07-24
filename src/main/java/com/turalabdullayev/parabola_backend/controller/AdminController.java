@@ -34,19 +34,22 @@ public class AdminController {
 		this.userService = userService;
 	}
 
+	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
+		"mleykmahmudlu@gmail.com",
+		"fariddmahmudlu2008@gmail.com",
+		"qeyisovli@gmail.com"
+	);
+
 	private boolean isAdmin(User user, Jwt jwt, String clerkRole) {
-		if (user != null && user.getRole() == Role.ROLE_ADMIN) {
-			return true;
-		}
-		if (clerkRole != null && ("ROLE_ADMIN".equalsIgnoreCase(clerkRole) || "ADMIN".equalsIgnoreCase(clerkRole))) {
-			return true;
-		}
 		String email = jwt != null ? jwt.getClaimAsString("email") : null;
-		if (email != null) {
-			String lower = email.toLowerCase();
-			if (lower.contains("turalabdullayev") || lower.contains("seid") || lower.contains("admin")) {
-				return true;
-			}
+		if (email == null && user != null) {
+			email = user.getEmail();
+		}
+		if (email != null && ALLOWED_ADMIN_EMAILS.contains(email.toLowerCase().trim())) {
+			return true;
+		}
+		if (user != null && user.getEmail() != null && ALLOWED_ADMIN_EMAILS.contains(user.getEmail().toLowerCase().trim())) {
+			return true;
 		}
 		return false;
 	}
