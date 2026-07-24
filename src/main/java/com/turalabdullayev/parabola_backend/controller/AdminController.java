@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.turalabdullayev.parabola_backend.entity.Role;
 import com.turalabdullayev.parabola_backend.entity.User;
+import com.turalabdullayev.parabola_backend.entity.Product;
 import com.turalabdullayev.parabola_backend.service.UserService;
 import com.turalabdullayev.parabola_backend.service.ClerkService;
+import com.turalabdullayev.parabola_backend.repository.ProductRepository;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,10 +33,12 @@ public class AdminController {
 
 	private final UserService userService;
 	private final ClerkService clerkService;
+	private final ProductRepository productRepository;
 
-	public AdminController(UserService userService, ClerkService clerkService) {
+	public AdminController(UserService userService, ClerkService clerkService, ProductRepository productRepository) {
 		this.userService = userService;
 		this.clerkService = clerkService;
+		this.productRepository = productRepository;
 	}
 
 	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
@@ -116,6 +120,22 @@ public class AdminController {
 
 		List<Map<String, Object>> clerkUsers = clerkService.getClerkUsersList();
 		List<User> dbUsers = userService.getAllUsers();
+		List<Product> allProducts = productRepository.findAll();
+
+		Map<String, String> productShopNamesByEmail = new java.util.HashMap<>();
+		if (allProducts != null) {
+			for (Product p : allProducts) {
+				if (p.getSellerEmail() != null && !p.getSellerEmail().isBlank()) {
+					String sEmail = p.getSellerEmail().toLowerCase().trim();
+					if (p.getSellerName() != null && !p.getSellerName().isBlank()) {
+						productShopNamesByEmail.put(sEmail, p.getSellerName());
+					} else if (!productShopNamesByEmail.containsKey(sEmail)) {
+						productShopNamesByEmail.put(sEmail, "Satıcı Mağazası");
+					}
+				}
+			}
+		}
+
 		Map<String, User> dbUsersByEmail = new java.util.HashMap<>();
 		for (User u : dbUsers) {
 			if (u.getEmail() != null) {
@@ -168,35 +188,50 @@ public class AdminController {
 					displayName = cleanEmail.contains("@") ? cleanEmail.split("@")[0] : cleanEmail;
 				}
 
-				// Extract Role
+				// Check Clerk Metadata Role
+				String clerkMetaRole = null;
+				@SuppressWarnings("unchecked")
+				Map<String, Object> meta = (Map<String, Object>) clerkUser.get("public_metadata");
+				if (meta != null && meta.get("role") != null) {
+					clerkMetaRole = (String) meta.get("role");
+				}
+
+				User matchedDbUser = dbUsersByEmail.get(cleanEmail);
+				boolean hasProducts = productShopNamesByEmail.containsKey(cleanEmail);
+				boolean isDbSeller = matchedDbUser != null && (matchedDbUser.getRole() == Role.ROLE_SELLER || (matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()));
+				boolean isClerkSeller = "ROLE_SELLER".equalsIgnoreCase(clerkMetaRole);
+
+				// Determine final role
 				String userRole = "ROLE_USER";
 				if (ALLOWED_ADMIN_EMAILS.contains(cleanEmail)) {
 					userRole = "ROLE_ADMIN";
-				} else {
-					@SuppressWarnings("unchecked")
-					Map<String, Object> meta = (Map<String, Object>) clerkUser.get("public_metadata");
-					if (meta != null && meta.get("role") != null) {
-						userRole = (String) meta.get("role");
-					}
+				} else if (hasProducts || isDbSeller || isClerkSeller) {
+					userRole = "ROLE_SELLER";
+				}
+
+				// Determine final shop name
+				String resolvedShopName = null;
+				if (matchedDbUser != null && matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()) {
+					resolvedShopName = matchedDbUser.getShopName();
+				} else if (hasProducts && productShopNamesByEmail.get(cleanEmail) != null && !productShopNamesByEmail.get(cleanEmail).isBlank()) {
+					resolvedShopName = productShopNamesByEmail.get(cleanEmail);
+				} else if ("ROLE_SELLER".equals(userRole)) {
+					resolvedShopName = displayName + " Mağazası";
 				}
 
 				// Sync with DB
-				User matchedDbUser = dbUsersByEmail.get(cleanEmail);
 				if (matchedDbUser == null) {
 					matchedDbUser = userService.getProfileOrOrCreate(cleanEmail, clerkId, userRole);
-				} else {
-					if (!displayName.equals(matchedDbUser.getUsername())) {
-						matchedDbUser.setUsername(displayName);
-					}
-					if (ALLOWED_ADMIN_EMAILS.contains(cleanEmail) && matchedDbUser.getRole() != Role.ROLE_ADMIN) {
-						matchedDbUser.setRole(Role.ROLE_ADMIN);
-						userService.updateUserRoleByAdmin(matchedDbUser.getId(), "ROLE_ADMIN", clerkId);
-					}
 				}
-
-				if (matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank() && !"ROLE_ADMIN".equals(userRole)) {
-					userRole = "ROLE_SELLER";
+				
+				matchedDbUser.setUsername(displayName);
+				if ("ROLE_SELLER".equals(userRole) && resolvedShopName != null) {
+					matchedDbUser.setShopName(resolvedShopName);
+					matchedDbUser.setRole(Role.ROLE_SELLER);
+				} else if ("ROLE_ADMIN".equals(userRole)) {
+					matchedDbUser.setRole(Role.ROLE_ADMIN);
 				}
+				userService.updateUserRoleByAdmin(matchedDbUser.getId(), userRole, clerkId);
 
 				Map<String, Object> userDto = new java.util.HashMap<>();
 				userDto.put("id", matchedDbUser.getId());
@@ -204,7 +239,7 @@ public class AdminController {
 				userDto.put("username", displayName);
 				userDto.put("email", cleanEmail);
 				userDto.put("role", userRole);
-				userDto.put("shopName", matchedDbUser.getShopName());
+				userDto.put("shopName", resolvedShopName);
 
 				responseList.add(userDto);
 			}
