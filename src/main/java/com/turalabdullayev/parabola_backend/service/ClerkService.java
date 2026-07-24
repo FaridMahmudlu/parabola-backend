@@ -80,4 +80,42 @@ public class ClerkService {
 			return false;
 		}
 	}
+
+	public String getUserEmail(String clerkUserId) {
+		if (clerkUserId == null || clerkUserId.isBlank()) {
+			return null;
+		}
+		try {
+			String url = "https://api.clerk.com/v1/users/" + clerkUserId;
+			HttpHeaders headers = new HttpHeaders();
+			headers.setBearerAuth(clerkSecretKey);
+			HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+			ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+				url,
+				HttpMethod.GET,
+				entity,
+				new ParameterizedTypeReference<Map<String, Object>>() {}
+			);
+			if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+				Map<String, Object> body = response.getBody();
+				@SuppressWarnings("unchecked")
+				java.util.List<Map<String, Object>> emailAddresses = (java.util.List<Map<String, Object>>) body.get("email_addresses");
+				if (emailAddresses != null && !emailAddresses.isEmpty()) {
+					String primaryId = (String) body.get("primary_email_address_id");
+					if (primaryId != null) {
+						for (Map<String, Object> emailObj : emailAddresses) {
+							if (primaryId.equals(emailObj.get("id"))) {
+								return (String) emailObj.get("email_address");
+							}
+						}
+					}
+					return (String) emailAddresses.get(0).get("email_address");
+				}
+			}
+		} catch (Exception e) {
+			System.err.println("Error fetching user email from Clerk: " + e.getMessage());
+		}
+		return null;
+	}
 }

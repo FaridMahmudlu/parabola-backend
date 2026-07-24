@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.turalabdullayev.parabola_backend.entity.Role;
 import com.turalabdullayev.parabola_backend.entity.User;
 import com.turalabdullayev.parabola_backend.service.UserService;
+import com.turalabdullayev.parabola_backend.service.ClerkService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -29,9 +30,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminController {
 
 	private final UserService userService;
+	private final ClerkService clerkService;
 
-	public AdminController(UserService userService) {
+	public AdminController(UserService userService, ClerkService clerkService) {
 		this.userService = userService;
+		this.clerkService = clerkService;
 	}
 
 	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
@@ -40,11 +43,32 @@ public class AdminController {
 		"qeyisovli@gmail.com"
 	);
 
-	private boolean isAdmin(User user, Jwt jwt, String clerkRole) {
-		String email = jwt != null ? jwt.getClaimAsString("email") : null;
-		if (email == null && user != null) {
-			email = user.getEmail();
+	private String extractEmail(Jwt jwt, String headerEmail) {
+		if (headerEmail != null && !headerEmail.isBlank() && headerEmail.contains("@") && !headerEmail.endsWith("@clerk.local")) {
+			return headerEmail.toLowerCase().trim();
 		}
+		if (jwt != null) {
+			String email = jwt.getClaimAsString("email");
+			if (email == null || email.isBlank()) {
+				email = jwt.getClaimAsString("email_address");
+			}
+			if (email != null && !email.isBlank() && email.contains("@")) {
+				return email.toLowerCase().trim();
+			}
+			String clerkUserId = jwt.getSubject();
+			if (clerkUserId != null && !clerkUserId.isBlank()) {
+				String realEmail = clerkService.getUserEmail(clerkUserId);
+				if (realEmail != null && !realEmail.isBlank()) {
+					return realEmail.toLowerCase().trim();
+				}
+			}
+			return jwt.getSubject() + "@clerk.local";
+		}
+		return null;
+	}
+
+	private boolean isAdmin(User user, Jwt jwt, String clerkRole, String headerEmail) {
+		String email = extractEmail(jwt, headerEmail);
 		if (email != null && ALLOWED_ADMIN_EMAILS.contains(email.toLowerCase().trim())) {
 			return true;
 		}
@@ -58,16 +82,14 @@ public class AdminController {
 	@Operation(summary = "Admin icazəsini yoxla")
 	public ResponseEntity<?> checkAdmin(
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		if (jwt == null) {
 			return ResponseEntity.status(401).body(Map.of("isAdmin", false, "message", "Giriş edilməyib."));
 		}
-		String email = jwt.getClaimAsString("email");
-		if (email == null || email.isBlank()) {
-			email = jwt.getSubject() + "@clerk.local";
-		}
+		String email = extractEmail(jwt, headerEmail);
 		User user = userService.getProfileOrOrCreate(email, jwt.getSubject(), clerkRole);
-		boolean adminAccess = isAdmin(user, jwt, clerkRole);
+		boolean adminAccess = isAdmin(user, jwt, clerkRole, headerEmail);
 
 		if (adminAccess && user.getRole() != Role.ROLE_ADMIN) {
 			user.setRole(Role.ROLE_ADMIN);
@@ -81,16 +103,14 @@ public class AdminController {
 	@Operation(summary = "Bütün istifadəçilərin siyahısını gətir (Admin)")
 	public ResponseEntity<?> getAllUsers(
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		if (jwt == null) {
 			return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
 		}
-		String email = jwt.getClaimAsString("email");
-		if (email == null || email.isBlank()) {
-			email = jwt.getSubject() + "@clerk.local";
-		}
+		String email = extractEmail(jwt, headerEmail);
 		User user = userService.getProfileOrOrCreate(email, jwt.getSubject(), clerkRole);
-		if (!isAdmin(user, jwt, clerkRole)) {
+		if (!isAdmin(user, jwt, clerkRole, headerEmail)) {
 			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız idarəçilər istifadəçi siyahısına baxa bilər."));
 		}
 
@@ -104,16 +124,14 @@ public class AdminController {
 			@PathVariable Long userId,
 			@RequestBody Map<String, String> body,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		if (jwt == null) {
 			return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
 		}
-		String email = jwt.getClaimAsString("email");
-		if (email == null || email.isBlank()) {
-			email = jwt.getSubject() + "@clerk.local";
-		}
+		String email = extractEmail(jwt, headerEmail);
 		User adminUser = userService.getProfileOrOrCreate(email, jwt.getSubject(), clerkRole);
-		if (!isAdmin(adminUser, jwt, clerkRole)) {
+		if (!isAdmin(adminUser, jwt, clerkRole, headerEmail)) {
 			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız idarəçilər rol dəyişə bilər."));
 		}
 
