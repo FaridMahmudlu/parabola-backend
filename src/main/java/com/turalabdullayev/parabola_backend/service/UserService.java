@@ -23,16 +23,20 @@ public class UserService {
 	}
 
 	public User getProfileOrOrCreate(String email, String clerkUserId, String roleName) {
-		com.turalabdullayev.parabola_backend.entity.Role dbRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
-		if (roleName != null) {
+		com.turalabdullayev.parabola_backend.entity.Role parsedRole = null;
+		if (roleName != null && !roleName.isBlank() && !"undefined".equalsIgnoreCase(roleName) && !"null".equalsIgnoreCase(roleName)) {
 			try {
-				dbRole = com.turalabdullayev.parabola_backend.entity.Role.valueOf(roleName);
+				parsedRole = com.turalabdullayev.parabola_backend.entity.Role.valueOf(roleName.toUpperCase());
 			} catch (IllegalArgumentException e) {
-				// Fallback to ROLE_USER if roleName doesn't match db enum
+				if ("SELLER".equalsIgnoreCase(roleName)) {
+					parsedRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER;
+				} else if ("ADMIN".equalsIgnoreCase(roleName)) {
+					parsedRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN;
+				}
 			}
 		}
 
-		final com.turalabdullayev.parabola_backend.entity.Role finalRole = dbRole;
+		final com.turalabdullayev.parabola_backend.entity.Role finalRole = parsedRole != null ? parsedRole : com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
 		User user = userRepository.findByEmail(email)
 				.orElseGet(() -> {
 					String username = email != null ? email : "user";
@@ -48,17 +52,24 @@ public class UserService {
 					return userRepository.save(newUser);
 				});
 
-		// Only update role if explicitly provided in JWT token
-		if (roleName != null) {
-			if (user.getRole() != finalRole) {
-				user.setRole(finalRole);
+		// Upgrade role if explicitly ROLE_SELLER or ROLE_ADMIN is provided
+		if (parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER || parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+			if (user.getRole() != parsedRole) {
+				user.setRole(parsedRole);
 				user = userRepository.save(user);
 			}
 		}
-		// If no role in JWT, but user is not ROLE_SELLER in DB, check Clerk API
+		// If user has a shopName set in database, ensure their role is ROLE_SELLER (unless they are ADMIN)
+		else if (user.getShopName() != null && !user.getShopName().isBlank()) {
+			if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
+				user = userRepository.save(user);
+			}
+		}
+		// If no explicit role in JWT, but user is not ROLE_SELLER in DB, check Clerk API
 		else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && clerkUserId != null) {
 			String clerkRole = clerkService.getUserRole(clerkUserId);
-			if ("ROLE_SELLER".equals(clerkRole) || "SELLER".equals(clerkRole)) {
+			if ("ROLE_SELLER".equalsIgnoreCase(clerkRole) || "SELLER".equalsIgnoreCase(clerkRole)) {
 				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
 				user = userRepository.save(user);
 			}
