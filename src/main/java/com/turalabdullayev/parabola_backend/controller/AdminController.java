@@ -197,7 +197,6 @@ public class AdminController {
 				}
 
 				User matchedDbUser = dbUsersByEmail.get(cleanEmail);
-				boolean hasProducts = productShopNamesByEmail.containsKey(cleanEmail);
 				boolean isDbSeller = matchedDbUser != null && (matchedDbUser.getRole() == Role.ROLE_SELLER || (matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()));
 				boolean isClerkSeller = "ROLE_SELLER".equalsIgnoreCase(clerkMetaRole);
 
@@ -205,7 +204,7 @@ public class AdminController {
 				String userRole = "ROLE_USER";
 				if (ALLOWED_ADMIN_EMAILS.contains(cleanEmail)) {
 					userRole = "ROLE_ADMIN";
-				} else if (hasProducts || isDbSeller || isClerkSeller) {
+				} else if (isDbSeller || isClerkSeller) {
 					userRole = "ROLE_SELLER";
 				}
 
@@ -213,8 +212,6 @@ public class AdminController {
 				String resolvedShopName = null;
 				if (matchedDbUser != null && matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()) {
 					resolvedShopName = matchedDbUser.getShopName();
-				} else if (hasProducts && productShopNamesByEmail.get(cleanEmail) != null && !productShopNamesByEmail.get(cleanEmail).isBlank()) {
-					resolvedShopName = productShopNamesByEmail.get(cleanEmail);
 				} else if ("ROLE_SELLER".equals(userRole)) {
 					resolvedShopName = displayName + " Mağazası";
 				}
@@ -230,6 +227,9 @@ public class AdminController {
 					matchedDbUser.setRole(Role.ROLE_SELLER);
 				} else if ("ROLE_ADMIN".equals(userRole)) {
 					matchedDbUser.setRole(Role.ROLE_ADMIN);
+				} else if ("ROLE_USER".equals(userRole)) {
+					matchedDbUser.setRole(Role.ROLE_USER);
+					matchedDbUser.setShopName(null);
 				}
 				userService.updateUserRoleByAdmin(matchedDbUser.getId(), userRole, clerkId);
 
@@ -241,21 +241,6 @@ public class AdminController {
 				userDto.put("role", userRole);
 				userDto.put("shopName", resolvedShopName);
 
-				responseList.add(userDto);
-			}
-		} else {
-			// Fallback to DB users
-			for (User u : dbUsers) {
-				String roleStr = u.getRole() != null ? u.getRole().name() : "ROLE_USER";
-				if (u.getEmail() != null && ALLOWED_ADMIN_EMAILS.contains(u.getEmail().toLowerCase().trim())) {
-					roleStr = "ROLE_ADMIN";
-				}
-				Map<String, Object> userDto = new java.util.HashMap<>();
-				userDto.put("id", u.getId());
-				userDto.put("username", u.getUsername());
-				userDto.put("email", u.getEmail());
-				userDto.put("role", roleStr);
-				userDto.put("shopName", u.getShopName());
 				responseList.add(userDto);
 			}
 		}
@@ -288,6 +273,30 @@ public class AdminController {
 		try {
 			User updatedUser = userService.updateUserRoleByAdmin(userId, newRole, jwt.getSubject());
 			
+			if ("ROLE_USER".equals(newRole)) {
+				updatedUser.setShopName(null);
+				userService.updateUserRoleByAdmin(updatedUser.getId(), "ROLE_USER", jwt.getSubject());
+			}
+
+			// Immediately sync role to Clerk REST API public_metadata
+			List<Map<String, Object>> clerkUsers = clerkService.getClerkUsersList();
+			if (clerkUsers != null) {
+				for (Map<String, Object> cu : clerkUsers) {
+					String cId = (String) cu.get("id");
+					@SuppressWarnings("unchecked")
+					List<Map<String, Object>> emails = (List<Map<String, Object>>) cu.get("email_addresses");
+					if (emails != null && !emails.isEmpty()) {
+						for (Map<String, Object> eObj : emails) {
+							String eAddr = (String) eObj.get("email_address");
+							if (eAddr != null && eAddr.equalsIgnoreCase(updatedUser.getEmail())) {
+								clerkService.updateUserRoleInClerk(cId, newRole);
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			Map<String, Object> userDto = new java.util.HashMap<>();
 			userDto.put("id", updatedUser.getId());
 			userDto.put("username", updatedUser.getUsername());
