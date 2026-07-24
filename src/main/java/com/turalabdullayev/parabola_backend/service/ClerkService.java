@@ -16,11 +16,22 @@ public class ClerkService {
 
 	private final RestTemplate restTemplate;
 
-	@Value("${clerk.secret-key:sk_test_6yj8K8ql1MgpG1V4OzD2o8cPwfrjGNwsh9uL9nXdWt}")
+	@Value("${clerk.secret-key:${CLERK_SECRET_KEY:sk_test_6yj8K8ql1MgpG1V4OzD2o8cPwfrjGNwsh9uL9nXdWt}}")
 	private String clerkSecretKey;
 
 	public ClerkService() {
 		this.restTemplate = new RestTemplate();
+	}
+
+	private String getSecretKey() {
+		String envKey = System.getenv("CLERK_SECRET_KEY");
+		if (envKey != null && !envKey.isBlank()) {
+			return envKey.trim();
+		}
+		if (clerkSecretKey != null && !clerkSecretKey.isBlank()) {
+			return clerkSecretKey.trim();
+		}
+		return "sk_test_6yj8K8ql1MgpG1V4OzD2o8cPwfrjGNwsh9uL9nXdWt";
 	}
 
 	public String getUserRole(String clerkUserId) {
@@ -30,7 +41,7 @@ public class ClerkService {
 		try {
 			String url = "https://api.clerk.com/v1/users/" + clerkUserId;
 			HttpHeaders headers = new HttpHeaders();
-			headers.setBearerAuth(clerkSecretKey);
+			headers.setBearerAuth(getSecretKey());
 			HttpEntity<Void> entity = new HttpEntity<>(headers);
 
 			ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -60,7 +71,7 @@ public class ClerkService {
 		try {
 			String url = "https://api.clerk.com/v1/users/" + clerkUserId + "/metadata";
 			HttpHeaders headers = new HttpHeaders();
-			headers.setBearerAuth(clerkSecretKey);
+			headers.setBearerAuth(getSecretKey());
 			headers.set("Content-Type", "application/json");
 
 			Map<String, Object> body = Map.of(
@@ -88,7 +99,7 @@ public class ClerkService {
 		try {
 			String url = "https://api.clerk.com/v1/users/" + clerkUserId;
 			HttpHeaders headers = new HttpHeaders();
-			headers.setBearerAuth(clerkSecretKey);
+			headers.setBearerAuth(getSecretKey());
 			HttpEntity<Void> entity = new HttpEntity<>(headers);
 
 			ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -123,7 +134,7 @@ public class ClerkService {
 		try {
 			String url = "https://api.clerk.com/v1/users?limit=500";
 			HttpHeaders headers = new HttpHeaders();
-			headers.setBearerAuth(clerkSecretKey);
+			headers.setBearerAuth(getSecretKey());
 			HttpEntity<Void> entity = new HttpEntity<>(headers);
 
 			ResponseEntity<java.util.List<Map<String, Object>>> response = restTemplate.exchange(
