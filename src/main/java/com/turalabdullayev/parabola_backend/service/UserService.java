@@ -121,4 +121,44 @@ public class UserService {
 
 		return "Profil məlumatlarınız uğurla yadda saxlanıldı!";
 	}
+
+	public List<User> getAllUsers() {
+		return userRepository.findAllByOrderByIdDesc();
+	}
+
+	public User updateUserRoleByAdmin(Long targetUserId, String newRoleStr, String clerkUserId) {
+		User targetUser = userRepository.findById(targetUserId)
+				.orElseThrow(() -> new IllegalArgumentException("İstifadəçi tapılmadı! ID: " + targetUserId));
+
+		com.turalabdullayev.parabola_backend.entity.Role targetRole;
+		try {
+			targetRole = com.turalabdullayev.parabola_backend.entity.Role.valueOf(newRoleStr.toUpperCase());
+		} catch (Exception e) {
+			if ("SELLER".equalsIgnoreCase(newRoleStr)) {
+				targetRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER;
+			} else if ("ADMIN".equalsIgnoreCase(newRoleStr)) {
+				targetRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN;
+			} else {
+				targetRole = com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
+			}
+		}
+
+		targetUser.setRole(targetRole);
+
+		if (targetRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER) {
+			if (targetUser.getShopName() == null || targetUser.getShopName().isBlank()) {
+				String shopDefaultName = targetUser.getUsername() != null ? targetUser.getUsername() + " Mağazası" : "Satıcı Mağazası";
+				targetUser.setShopName(shopDefaultName);
+			}
+		}
+
+		User saved = userRepository.save(targetUser);
+
+		// Sync with Clerk if clerkUserId available
+		if (clerkUserId != null && !clerkUserId.isBlank()) {
+			clerkService.updateUserRoleInClerk(clerkUserId, targetRole.name());
+		}
+
+		return saved;
+	}
 }

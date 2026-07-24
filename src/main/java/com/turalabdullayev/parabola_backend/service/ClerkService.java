@@ -52,4 +52,32 @@ public class ClerkService {
 		}
 		return null;
 	}
+
+	public boolean updateUserRoleInClerk(String clerkUserId, String newRole) {
+		if (clerkUserId == null || clerkUserId.isBlank()) {
+			return false;
+		}
+		try {
+			String url = "https://api.clerk.com/v1/users/" + clerkUserId + "/metadata";
+			HttpHeaders headers = new HttpHeaders();
+			headers.setBearerAuth(clerkSecretKey);
+			headers.set("Content-Type", "application/json");
+
+			Map<String, Object> body = Map.of(
+				"public_metadata", Map.of("role", newRole)
+			);
+			HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+			ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+				url,
+				HttpMethod.PATCH,
+				entity,
+				new ParameterizedTypeReference<Map<String, Object>>() {}
+			);
+			return response.getStatusCode().is2xxSuccessful();
+		} catch (Exception e) {
+			System.err.println("Error updating user role in Clerk: " + e.getMessage());
+			return false;
+		}
+	}
 }
