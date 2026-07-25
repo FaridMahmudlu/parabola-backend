@@ -26,6 +26,7 @@ import com.turalabdullayev.parabola_backend.entity.Role;
 import com.turalabdullayev.parabola_backend.service.ProductService;
 import com.turalabdullayev.parabola_backend.service.SupabaseStorageService;
 import com.turalabdullayev.parabola_backend.service.UserService;
+import com.turalabdullayev.parabola_backend.service.ClerkService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -42,26 +43,72 @@ public class ProductController {
 	private final ProductService productService;
 	private final SupabaseStorageService supabaseStorageService;
 	private final UserService userService;
+	private final ClerkService clerkService;
 
-	public ProductController(ProductService productService, SupabaseStorageService supabaseStorageService, UserService userService) {
+	public ProductController(ProductService productService, SupabaseStorageService supabaseStorageService, UserService userService, ClerkService clerkService) {
 		this.productService = productService;
 		this.supabaseStorageService = supabaseStorageService;
 		this.userService = userService;
+		this.clerkService = clerkService;
 	}
 
-	private String extractEmail(Jwt jwt) {
-		String email = jwt.getClaimAsString("email");
-		if (email == null || email.isBlank()) {
-			email = jwt.getSubject() + "@clerk.local";
+	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
+		"mleykmahmudlu@gmail.com",
+		"fariddmahmudlu2008@gmail.com",
+		"qeyisovli@gmail.com"
+	);
+
+	private String extractEmail(Jwt jwt, String headerEmail) {
+		if (headerEmail != null && !headerEmail.isBlank() && headerEmail.contains("@") && !headerEmail.endsWith("@clerk.local")) {
+			return headerEmail.toLowerCase().trim();
 		}
-		return email;
+		if (jwt != null) {
+			String email = jwt.getClaimAsString("email");
+			if (email == null || email.isBlank()) {
+				email = jwt.getClaimAsString("email_address");
+			}
+			if (email != null && !email.isBlank() && email.contains("@")) {
+				return email.toLowerCase().trim();
+			}
+			String clerkUserId = jwt.getSubject();
+			if (clerkUserId != null && !clerkUserId.isBlank()) {
+				String realEmail = clerkService.getUserEmail(clerkUserId);
+				if (realEmail != null && !realEmail.isBlank()) {
+					return realEmail.toLowerCase().trim();
+				}
+			}
+			return jwt.getSubject() + "@clerk.local";
+		}
+		return null;
 	}
 
-	private String extractUsername(Jwt jwt) {
-		String name = jwt.getClaimAsString("name");
-		if (name != null && !name.isBlank()) return name;
-		String email = extractEmail(jwt);
-		return email.contains("@") ? email.split("@")[0] : email;
+	private boolean isSellerOrAdmin(User user, String sellerEmail, String clerkRole) {
+		if (sellerEmail != null && ALLOWED_ADMIN_EMAILS.contains(sellerEmail.toLowerCase().trim())) {
+			return true;
+		}
+		if ("ROLE_SELLER".equalsIgnoreCase(clerkRole) || "ROLE_ADMIN".equalsIgnoreCase(clerkRole)) {
+			return true;
+		}
+		if (user != null) {
+			if (user.getRole() == Role.ROLE_SELLER || user.getRole() == Role.ROLE_ADMIN) {
+				return true;
+			}
+			if (user.getShopName() != null && !user.getShopName().isBlank()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private String extractUsername(Jwt jwt, String email) {
+		if (jwt != null) {
+			String name = jwt.getClaimAsString("name");
+			if (name != null && !name.isBlank()) return name;
+		}
+		if (email != null && email.contains("@")) {
+			return email.split("@")[0];
+		}
+		return "Satıcı";
 	}
 
 	private List<String> uploadImages(List<MultipartFile> files) throws IOException {
@@ -88,14 +135,17 @@ public class ProductController {
 			@RequestPart("product") String productJson,
 			@RequestPart("images") List<MultipartFile> files,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
-			String sellerEmail = extractEmail(jwt);
+			if (jwt == null) {
+				return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
+			}
+			String sellerEmail = extractEmail(jwt, headerEmail);
 			
-			// Database role check
 			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
-			if (user.getRole() != Role.ROLE_SELLER) {
-				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul əlavə edə bilər."));
+			if (!isSellerOrAdmin(user, sellerEmail, clerkRole)) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar və idarəçilər məhsul əlavə edə bilər."));
 			}
 
 			ObjectMapper objectMapper = new ObjectMapper();
@@ -104,7 +154,9 @@ public class ProductController {
 			List<String> fileUrls = uploadImages(files);
 			product.setImageUrls(fileUrls);
 
-			String sellerName = extractUsername(jwt);
+			String sellerName = (user != null && user.getShopName() != null && !user.getShopName().isBlank()) 
+					? user.getShopName() 
+					: extractUsername(jwt, sellerEmail);
 
 			Product savedProduct = productService.saveProduct(product, sellerEmail, sellerName);
 			return ResponseEntity.ok(savedProduct);
@@ -120,13 +172,16 @@ public class ProductController {
 	@Operation(summary = "Satıcının öz məhsullarını gətir")
 	public ResponseEntity<?> getMyProducts(
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
-		String sellerEmail = extractEmail(jwt);
+		if (jwt == null) {
+			return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
+		}
+		String sellerEmail = extractEmail(jwt, headerEmail);
 		
-		// Database role check
 		User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
-		if (user.getRole() != Role.ROLE_SELLER) {
-			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsullarını görə bilər."));
+		if (!isSellerOrAdmin(user, sellerEmail, clerkRole)) {
+			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar və idarəçilər məhsullarını görə bilər."));
 		}
 
 		List<Product> products = productService.getProductsBySeller(sellerEmail);
@@ -141,14 +196,17 @@ public class ProductController {
 			@RequestPart("product") String productJson,
 			@RequestPart(value = "images", required = false) List<MultipartFile> files,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
-			String sellerEmail = extractEmail(jwt);
+			if (jwt == null) {
+				return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
+			}
+			String sellerEmail = extractEmail(jwt, headerEmail);
 			
-			// Database role check
 			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
-			if (user.getRole() != Role.ROLE_SELLER) {
-				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul yeniləyə bilər."));
+			if (!isSellerOrAdmin(user, sellerEmail, clerkRole)) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar və idarəçilər məhsul yeniləyə bilər."));
 			}
 
 			ObjectMapper objectMapper = new ObjectMapper();
@@ -176,14 +234,17 @@ public class ProductController {
 	public ResponseEntity<?> deleteProduct(
 			@PathVariable Long id,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
 		try {
-			String sellerEmail = extractEmail(jwt);
+			if (jwt == null) {
+				return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
+			}
+			String sellerEmail = extractEmail(jwt, headerEmail);
 			
-			// Database role check
 			User user = userService.getProfileOrOrCreate(sellerEmail, jwt.getSubject(), clerkRole);
-			if (user.getRole() != Role.ROLE_SELLER) {
-				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar məhsul silə bilər."));
+			if (!isSellerOrAdmin(user, sellerEmail, clerkRole)) {
+				return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız satıcılar və idarəçilər məhsul silə bilər."));
 			}
 
 			productService.deleteProduct(id, sellerEmail);
@@ -196,8 +257,10 @@ public class ProductController {
 	// --- READ ALL (sıralanmış) ---
 	@GetMapping
 	@Operation(summary = "Bütün geyimləri uyğunluq sırası ilə gətir")
-	public ResponseEntity<List<Product>> getAllProducts(@AuthenticationPrincipal Jwt jwt) {
-		String email = jwt != null ? extractEmail(jwt) : null;
+	public ResponseEntity<List<Product>> getAllProducts(
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
+			@AuthenticationPrincipal Jwt jwt) {
+		String email = jwt != null ? extractEmail(jwt, headerEmail) : null;
 		List<Product> products = productService.getAllProductsSorted(email);
 		return ResponseEntity.ok(products);
 	}
@@ -206,8 +269,9 @@ public class ProductController {
 	@GetMapping("/{id}")
 	@Operation(summary = "Geyim detalı və ağıllı ölçü tövsiyəsi")
 	public ResponseEntity<Map<String, Object>> getProductDetails(@PathVariable Long id,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
-		String email = extractEmail(jwt);
+		String email = jwt != null ? extractEmail(jwt, headerEmail) : null;
 		Map<String, Object> details = productService.getProductDetailsWithRecommendation(id, email);
 		return ResponseEntity.ok(details);
 	}
