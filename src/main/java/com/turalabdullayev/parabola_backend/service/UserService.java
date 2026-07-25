@@ -99,9 +99,11 @@ public class UserService {
 		user.setBodyType(bodyType);
 		user.setShopName(shopName);
 
-		// If user has updated their shop name, they are a seller
+		// If user has updated their shop name, set role to ROLE_SELLER (unless they are an admin)
 		if (shopName != null && !shopName.isBlank()) {
-			user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
+			if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
+			}
 		} else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
 			user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER);
 		}
