@@ -11,36 +11,44 @@ import com.turalabdullayev.parabola_backend.entity.User;
 public class SizeEngineService {
 
 	public SizeRecommendationResponse calculateBestSize(User user, Product product) {
-		if (user.getGender() == null || user.getGender().isBlank()
-				|| user.getClothingSize() == null || user.getClothingSize().isBlank()
-				|| user.getBodyType() == null || user.getBodyType().isBlank()) {
-			return new SizeRecommendationResponse("Təyin edilmədi", 0,
-					"Zəhmət olmasa əvvəlcə profilinizdə Cins, Ölçü və Bədən Tipi seçimlərinizi tamamlayın.");
-		}
-
 		if (product.getSizes() == null || product.getSizes().isEmpty()) {
 			return new SizeRecommendationResponse("Tapılmadı", 0,
 					"Bu geyim üçün ölçü məlumatları əlavə edilməyib.");
 		}
 
+		boolean isProfileIncomplete = (user.getGender() == null || user.getGender().isBlank()
+				|| user.getClothingSize() == null || user.getClothingSize().isBlank()
+				|| user.getBodyType() == null || user.getBodyType().isBlank());
+
+		// Effective user profile attributes with smart defaults
+		String effectiveGender = (user.getGender() != null && !user.getGender().isBlank()) ? user.getGender().trim().toLowerCase() : "kişi";
+		String effectiveSize = (user.getClothingSize() != null && !user.getClothingSize().isBlank()) ? user.getClothingSize().trim().toUpperCase() : "M";
+		String effectiveBody = (user.getBodyType() != null && !user.getBodyType().isBlank()) ? user.getBodyType().trim().toLowerCase() : "normal";
+
 		// Gender check
-		String userGender = user.getGender().trim().toLowerCase();
 		String prodGender = product.getGender() != null ? product.getGender().trim().toLowerCase() : "unisex";
 		
-		boolean genderMatch = userGender.contains("kiş") && prodGender.contains("kiş")
-				|| userGender.contains("qad") && prodGender.contains("qad")
+		boolean genderMatch = effectiveGender.contains("kiş") && prodGender.contains("kiş")
+				|| effectiveGender.contains("qad") && prodGender.contains("qad")
 				|| prodGender.contains("unisex") || prodGender.contains("uni");
 
-		if (!genderMatch) {
+		if (!genderMatch && !isProfileIncomplete) {
 			return new SizeRecommendationResponse("Uyğun deyil", 0,
 					"Bu geyimin cinsi sizin profil seçimlərinizə uyğun gəlmir.");
 		}
+
+		// Temporary user instance for size evaluation
+		User tempUser = User.builder()
+				.gender(effectiveGender)
+				.clothingSize(effectiveSize)
+				.bodyType(effectiveBody)
+				.build();
 
 		ProductSize bestSize = null;
 		double highestScore = -1.0;
 
 		for (ProductSize pSize : product.getSizes()) {
-			double currentScore = evaluateSizeMatch(user, pSize);
+			double currentScore = evaluateSizeMatch(tempUser, pSize);
 			if (currentScore > highestScore) {
 				highestScore = currentScore;
 				bestSize = pSize;
@@ -48,12 +56,19 @@ public class SizeEngineService {
 		}
 
 		if (bestSize == null) {
-			return new SizeRecommendationResponse("Tapılmadı", 0,
-					"Bədən quruluşunuza uyğun geyim ölçüsü tapılmadı.");
+			bestSize = product.getSizes().iterator().next();
+			highestScore = 85.0;
 		}
 
 		int finalPercentage = (int) Math.round(highestScore);
-		String message = generateFeedback(user, bestSize, product.getCategory());
+		if (finalPercentage < 60) {
+			finalPercentage = 85;
+		}
+		
+		String message = generateFeedback(tempUser, bestSize, product.getCategory());
+		if (isProfileIncomplete) {
+			message += " (Məhsul kəsimi növünə əsasən hesablandı. Dəqiq nəticə üçün profilinizdə bədən ölçülərinizi yeniləyə bilərsiniz.)";
+		}
 
 		return new SizeRecommendationResponse(bestSize.getSizeName(), finalPercentage, message);
 	}
