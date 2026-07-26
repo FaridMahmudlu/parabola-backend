@@ -210,7 +210,9 @@ public class AdminController {
 
 				// Determine final shop name
 				String resolvedShopName = null;
-				if (matchedDbUser != null && matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()) {
+				if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(cleanEmail)) {
+					resolvedShopName = "Parabola Admin";
+				} else if (matchedDbUser != null && matchedDbUser.getShopName() != null && !matchedDbUser.getShopName().isBlank()) {
 					resolvedShopName = matchedDbUser.getShopName();
 				} else if ("ROLE_SELLER".equals(userRole) || "ROLE_ADMIN".equals(userRole)) {
 					resolvedShopName = displayName + " Mağazası";
@@ -227,11 +229,7 @@ public class AdminController {
 					matchedDbUser.setRole(Role.ROLE_SELLER);
 				} else if ("ROLE_ADMIN".equals(userRole)) {
 					matchedDbUser.setRole(Role.ROLE_ADMIN);
-					if (matchedDbUser.getShopName() == null || matchedDbUser.getShopName().isBlank()) {
-						matchedDbUser.setShopName(resolvedShopName);
-					} else {
-						resolvedShopName = matchedDbUser.getShopName();
-					}
+					matchedDbUser.setShopName(resolvedShopName);
 				} else if ("ROLE_USER".equals(userRole)) {
 					matchedDbUser.setRole(Role.ROLE_USER);
 					matchedDbUser.setShopName(null);

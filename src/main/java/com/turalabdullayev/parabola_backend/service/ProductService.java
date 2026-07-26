@@ -30,6 +30,45 @@ public class ProductService {
 		this.sizeEngineService = sizeEngineService;
 	}
 
+	@jakarta.annotation.PostConstruct
+	public void cleanUpSellerNames() {
+		try {
+			List<Product> products = productRepository.findAll();
+			boolean changed = false;
+			for (Product p : products) {
+				String email = p.getSellerEmail();
+				String sName = p.getSellerName();
+				
+				if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(email) 
+						|| (sName != null && sName.toLowerCase().contains("mleykmahmudlu"))) {
+					if (!"Parabola Admin".equals(sName)) {
+						p.setSellerName("Parabola Admin");
+						changed = true;
+					}
+					Optional<User> uOpt = userRepository.findByEmail("mleykmahmudlu@gmail.com");
+					if (uOpt.isPresent() && !"Parabola Admin".equals(uOpt.get().getShopName())) {
+						User u = uOpt.get();
+						u.setShopName("Parabola Admin");
+						userRepository.save(u);
+					}
+				} else if (email != null && !email.isBlank()) {
+					Optional<User> uOpt = userRepository.findByEmail(email);
+					if (uOpt.isPresent() && uOpt.get().getShopName() != null && !uOpt.get().getShopName().isBlank()) {
+						if (!uOpt.get().getShopName().equals(sName)) {
+							p.setSellerName(uOpt.get().getShopName());
+							changed = true;
+						}
+					}
+				}
+			}
+			if (changed) {
+				productRepository.saveAll(products);
+			}
+		} catch (Exception e) {
+			System.err.println("Məhsul satıcı adları təmizlənərkən xəta: " + e.getMessage());
+		}
+	}
+
 	// --- CREATE ---
 	public Product saveProduct(Product product, String sellerEmail, String sellerName) {
 		if ((product.getContactLink() == null || product.getContactLink().isBlank()) && 
@@ -41,16 +80,22 @@ public class ProductService {
 		
 		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
 		String finalShopName = sellerName;
-		if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
+
+		if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(sellerEmail) 
+				|| (finalShopName != null && finalShopName.toLowerCase().contains("mleykmahmudlu"))) {
+			finalShopName = "Parabola Admin";
+		} else if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
 			finalShopName = sellerOpt.get().getShopName();
 		} else if (finalShopName == null || finalShopName.isBlank() || finalShopName.endsWith("@clerk.local")) {
 			finalShopName = (sellerEmail != null && sellerEmail.contains("@")) ? sellerEmail.split("@")[0] + " Mağazası" : "Satıcı Mağazası";
 		}
 		
-		if (sellerOpt.isPresent() && (sellerOpt.get().getShopName() == null || sellerOpt.get().getShopName().isBlank())) {
+		if (sellerOpt.isPresent()) {
 			User seller = sellerOpt.get();
-			seller.setShopName(finalShopName);
-			userRepository.save(seller);
+			if (seller.getShopName() == null || seller.getShopName().isBlank() || !seller.getShopName().equals(finalShopName)) {
+				seller.setShopName(finalShopName);
+				userRepository.save(seller);
+			}
 		}
 		
 		product.setSellerName(finalShopName);
@@ -87,9 +132,13 @@ public class ProductService {
 			throw new RuntimeException("Bu məhsul sizə aid deyil! Yalnız öz məhsullarınızı redaktə edə bilərsiniz.");
 		}
 
-		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
-		if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
-			existing.setSellerName(sellerOpt.get().getShopName());
+		if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(sellerEmail)) {
+			existing.setSellerName("Parabola Admin");
+		} else {
+			Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
+			if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
+				existing.setSellerName(sellerOpt.get().getShopName());
+			}
 		}
 		existing.setName(updatedData.getName());
 		existing.setBrand(updatedData.getBrand());
