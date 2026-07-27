@@ -299,6 +299,71 @@ public class ProductService {
 		return response;
 	}
 
+	public Map<String, Object> getStoreDetails(String shopName, String userEmail) {
+		if (shopName == null || shopName.isBlank()) {
+			throw new IllegalArgumentException("Mağaza adı daxil edilməlidir!");
+		}
+
+		String cleanShopName = shopName.trim();
+		List<Product> products = productRepository.findBySellerNameIgnoreCaseOrderByIdDesc(cleanShopName);
+		
+		Optional<User> sellerUserOpt = userRepository.findFirstByShopNameIgnoreCase(cleanShopName);
+
+		String contactPhone = null;
+		String contactLink = null;
+		String sellerEmail = null;
+
+		if (sellerUserOpt.isPresent()) {
+			User sellerUser = sellerUserOpt.get();
+			sellerEmail = sellerUser.getEmail();
+		}
+
+		if (products != null && !products.isEmpty()) {
+			for (Product p : products) {
+				if (contactPhone == null && p.getContactPhone() != null && !p.getContactPhone().isBlank()) {
+					contactPhone = p.getContactPhone();
+				}
+				if (contactLink == null && p.getContactLink() != null && !p.getContactLink().isBlank()) {
+					contactLink = p.getContactLink();
+				}
+				if (sellerEmail == null && p.getSellerEmail() != null && !p.getSellerEmail().isBlank()) {
+					sellerEmail = p.getSellerEmail();
+				}
+			}
+		}
+
+		// Sort products if userEmail provided
+		if (userEmail != null && !userEmail.isBlank() && products != null && !products.isEmpty()) {
+			Optional<User> optUser = userRepository.findByEmail(userEmail);
+			if (optUser.isPresent()) {
+				User user = optUser.get();
+				if (user.getGender() != null || user.getClothingSize() != null) {
+					List<Map.Entry<Product, Double>> scored = new ArrayList<>();
+					for (Product p : products) {
+						double score = calculateRelevanceScore(p, user);
+						scored.add(Map.entry(p, score));
+					}
+					scored.sort(Comparator.<Map.Entry<Product, Double>, Double>comparing(Map.Entry::getValue).reversed());
+					List<Product> sorted = new ArrayList<>();
+					for (Map.Entry<Product, Double> entry : scored) {
+						sorted.add(entry.getKey());
+					}
+					products = sorted;
+				}
+			}
+		}
+
+		Map<String, Object> storeData = new HashMap<>();
+		storeData.put("shopName", cleanShopName);
+		storeData.put("sellerEmail", sellerEmail);
+		storeData.put("contactPhone", contactPhone);
+		storeData.put("contactLink", contactLink);
+		storeData.put("totalProducts", products != null ? products.size() : 0);
+		storeData.put("products", products != null ? products : new ArrayList<>());
+
+		return storeData;
+	}
+
 	private void setDefaultModelBodyType(ProductSize pSize) {
 		String fit = pSize.getClothingFit() != null ? pSize.getClothingFit().trim() : "Orta";
 		String manken = pSize.getModelBodyType() != null ? pSize.getModelBodyType().trim() : "";

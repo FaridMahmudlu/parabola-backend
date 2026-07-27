@@ -275,4 +275,16 @@ public class ProductController {
 		Map<String, Object> details = productService.getProductDetailsWithRecommendation(id, email);
 		return ResponseEntity.ok(details);
 	}
+
+	// --- READ STORE ---
+	@GetMapping("/store/{shopName}")
+	@Operation(summary = "Butik Mağaza detallarını və geyimlərini gətir")
+	public ResponseEntity<Map<String, Object>> getStoreDetails(
+			@PathVariable String shopName,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
+			@AuthenticationPrincipal Jwt jwt) {
+		String email = jwt != null ? extractEmail(jwt, headerEmail) : null;
+		Map<String, Object> storeData = productService.getStoreDetails(shopName, email);
+		return ResponseEntity.ok(storeData);
+	}
 }

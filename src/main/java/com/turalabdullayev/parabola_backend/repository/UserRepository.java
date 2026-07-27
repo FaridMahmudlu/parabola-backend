@@ -18,4 +18,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	Boolean existsByUsername(String username);
 
 	java.util.List<User> findAllByOrderByIdDesc();
+
+	Optional<User> findFirstByShopNameIgnoreCase(String shopName);
 }
