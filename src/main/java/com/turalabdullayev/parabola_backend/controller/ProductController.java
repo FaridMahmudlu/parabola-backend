@@ -283,8 +283,34 @@ public class ProductController {
 			@PathVariable String shopName,
 			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
 			@AuthenticationPrincipal Jwt jwt) {
-		String email = jwt != null ? extractEmail(jwt, headerEmail) : null;
-		Map<String, Object> storeData = productService.getStoreDetails(shopName, email);
-		return ResponseEntity.ok(storeData);
+		try {
+			// URL decode the shopName path variable
+			String decodedShopName = shopName;
+			try {
+				decodedShopName = java.net.URLDecoder.decode(shopName, java.nio.charset.StandardCharsets.UTF_8);
+			} catch (Exception e) {
+				// If decoding fails, use as-is
+			}
+			
+			String email = jwt != null ? extractEmail(jwt, headerEmail) : null;
+			Map<String, Object> storeData = productService.getStoreDetails(decodedShopName, email);
+			return ResponseEntity.ok(storeData);
+		} catch (IllegalArgumentException e) {
+			Map<String, Object> error = new java.util.HashMap<>();
+			error.put("storeFound", false);
+			error.put("message", e.getMessage());
+			error.put("products", new java.util.ArrayList<>());
+			error.put("totalProducts", 0);
+			error.put("shopName", shopName);
+			return ResponseEntity.ok(error);
+		} catch (Exception e) {
+			Map<String, Object> error = new java.util.HashMap<>();
+			error.put("storeFound", false);
+			error.put("message", "Mağaza yüklənərkən xəta: " + e.getMessage());
+			error.put("products", new java.util.ArrayList<>());
+			error.put("totalProducts", 0);
+			error.put("shopName", shopName);
+			return ResponseEntity.ok(error);
+		}
 	}
 }

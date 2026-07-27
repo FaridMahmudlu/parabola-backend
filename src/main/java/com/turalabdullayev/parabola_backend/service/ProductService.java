@@ -39,6 +39,13 @@ public class ProductService {
 				String email = p.getSellerEmail();
 				String sName = p.getSellerName();
 				
+				// Trim all sellerNames to prevent whitespace matching issues
+				if (sName != null && !sName.equals(sName.trim())) {
+					p.setSellerName(sName.trim());
+					sName = sName.trim();
+					changed = true;
+				}
+
 				if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(email) 
 						|| (sName != null && sName.toLowerCase().contains("mleykmahmudlu"))) {
 					if (!"Parabola Admin".equals(sName)) {
@@ -55,7 +62,7 @@ public class ProductService {
 					Optional<User> uOpt = userRepository.findByEmail(email);
 					if (uOpt.isPresent() && uOpt.get().getShopName() != null && !uOpt.get().getShopName().isBlank()) {
 						if (!uOpt.get().getShopName().equals(sName)) {
-							p.setSellerName(uOpt.get().getShopName());
+							p.setSellerName(uOpt.get().getShopName().trim());
 							changed = true;
 						}
 					}
@@ -63,6 +70,15 @@ public class ProductService {
 			}
 			if (changed) {
 				productRepository.saveAll(products);
+			}
+			
+			// Also trim shopNames in User table
+			List<User> allUsers = userRepository.findAllByOrderByIdDesc();
+			for (User u : allUsers) {
+				if (u.getShopName() != null && !u.getShopName().equals(u.getShopName().trim())) {
+					u.setShopName(u.getShopName().trim());
+					userRepository.save(u);
+				}
 			}
 		} catch (Exception e) {
 			System.err.println("Məhsul satıcı adları təmizlənərkən xəta: " + e.getMessage());
@@ -304,10 +320,32 @@ public class ProductService {
 			throw new IllegalArgumentException("Mağaza adı daxil edilməlidir!");
 		}
 
+		// URL decode and trim the shopName
 		String cleanShopName = shopName.trim();
-		List<Product> products = productRepository.findBySellerNameIgnoreCaseOrderByIdDesc(cleanShopName);
-		
+		try {
+			cleanShopName = java.net.URLDecoder.decode(cleanShopName, java.nio.charset.StandardCharsets.UTF_8).trim();
+		} catch (Exception e) {
+			// If decoding fails, continue with cleaned original
+		}
+
+		// 1. Try TRIM-based JPQL query first (handles DB values with trailing spaces)
+		List<Product> products = productRepository.findBySellerNameTrimmedIgnoreCase(cleanShopName);
+
+		// 2. Fallback: exact sellerName match
+		if (products == null || products.isEmpty()) {
+			products = productRepository.findBySellerNameIgnoreCaseOrderByIdDesc(cleanShopName);
+		}
+
+		// 3. Lookup the seller user by shopName
 		Optional<User> sellerUserOpt = userRepository.findFirstByShopNameIgnoreCase(cleanShopName);
+
+		// 4. Fallback: if still no products, try finding by seller email from User table
+		if ((products == null || products.isEmpty()) && sellerUserOpt.isPresent()) {
+			String sellerEmailFromUser = sellerUserOpt.get().getEmail();
+			if (sellerEmailFromUser != null && !sellerEmailFromUser.isBlank()) {
+				products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmailFromUser);
+			}
+		}
 
 		String contactPhone = null;
 		String contactLink = null;
@@ -316,6 +354,10 @@ public class ProductService {
 		if (sellerUserOpt.isPresent()) {
 			User sellerUser = sellerUserOpt.get();
 			sellerEmail = sellerUser.getEmail();
+			// Use actual shopName from the User for display consistency
+			if (sellerUser.getShopName() != null && !sellerUser.getShopName().isBlank()) {
+				cleanShopName = sellerUser.getShopName().trim();
+			}
 		}
 
 		if (products != null && !products.isEmpty()) {
@@ -353,6 +395,16 @@ public class ProductService {
 			}
 		}
 
+		// Extract categories from store products
+		List<String> categories = new ArrayList<>();
+		if (products != null) {
+			for (Product p : products) {
+				if (p.getCategory() != null && !p.getCategory().isBlank() && !categories.contains(p.getCategory())) {
+					categories.add(p.getCategory());
+				}
+			}
+		}
+
 		Map<String, Object> storeData = new HashMap<>();
 		storeData.put("shopName", cleanShopName);
 		storeData.put("sellerEmail", sellerEmail);
@@ -360,6 +412,8 @@ public class ProductService {
 		storeData.put("contactLink", contactLink);
 		storeData.put("totalProducts", products != null ? products.size() : 0);
 		storeData.put("products", products != null ? products : new ArrayList<>());
+		storeData.put("categories", categories);
+		storeData.put("storeFound", true);
 
 		return storeData;
 	}
