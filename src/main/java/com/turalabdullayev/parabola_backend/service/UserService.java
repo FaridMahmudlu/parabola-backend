@@ -223,7 +223,7 @@ public class UserService {
 
 		// Sync shopName and contacts to all existing products of this seller
 		if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
-			List<Product> products = productRepository.findBySellerEmail(sellerEmail);
+			List<Product> products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmail);
 			if (products != null && !products.isEmpty()) {
 				for (Product p : products) {
 					p.setSellerName(savedUser.getShopName());

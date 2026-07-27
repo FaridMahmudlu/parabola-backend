@@ -117,12 +117,12 @@ public class UserController {
 			@AuthenticationPrincipal Jwt jwt,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
 			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
-			@org.springframework.web.bind.annotation.RequestPart(value = "shopName", required = false) String shopName,
-			@org.springframework.web.bind.annotation.RequestPart(value = "shopPhone", required = false) String shopPhone,
-			@org.springframework.web.bind.annotation.RequestPart(value = "shopLink", required = false) String shopLink,
-			@org.springframework.web.bind.annotation.RequestPart(value = "shopBio", required = false) String shopBio,
-			@org.springframework.web.bind.annotation.RequestPart(value = "avatarFile", required = false) org.springframework.web.multipart.MultipartFile avatarFile,
-			@org.springframework.web.bind.annotation.RequestPart(value = "bannerFile", required = false) org.springframework.web.multipart.MultipartFile bannerFile) {
+			@org.springframework.web.bind.annotation.RequestParam(value = "shopName", required = false) String shopName,
+			@org.springframework.web.bind.annotation.RequestParam(value = "shopPhone", required = false) String shopPhone,
+			@org.springframework.web.bind.annotation.RequestParam(value = "shopLink", required = false) String shopLink,
+			@org.springframework.web.bind.annotation.RequestParam(value = "shopBio", required = false) String shopBio,
+			@org.springframework.web.bind.annotation.RequestParam(value = "avatarFile", required = false) org.springframework.web.multipart.MultipartFile avatarFile,
+			@org.springframework.web.bind.annotation.RequestParam(value = "bannerFile", required = false) org.springframework.web.multipart.MultipartFile bannerFile) {
 		
 		String email = extractEmail(jwt, headerEmail);
 		String roleName = clerkRole != null && !clerkRole.isBlank() ? clerkRole : jwt.getClaimAsString("role");
