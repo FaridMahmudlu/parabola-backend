@@ -15,11 +15,13 @@ public class UserService {
 	private final UserRepository userRepository;
 	private final ProductRepository productRepository;
 	private final ClerkService clerkService;
+	private final SupabaseStorageService supabaseStorageService;
 
-	public UserService(UserRepository userRepository, ProductRepository productRepository, ClerkService clerkService) {
+	public UserService(UserRepository userRepository, ProductRepository productRepository, ClerkService clerkService, SupabaseStorageService supabaseStorageService) {
 		this.userRepository = userRepository;
 		this.productRepository = productRepository;
 		this.clerkService = clerkService;
+		this.supabaseStorageService = supabaseStorageService;
 	}
 
 	public User getProfileOrOrCreate(String email, String clerkUserId, String roleName) {
@@ -122,6 +124,109 @@ public class UserService {
 		}
 
 		return "Profil məlumatlarınız uğurla yadda saxlanıldı!";
+	}
+
+	public User updateStoreProfile(
+			String sellerEmail, 
+			String roleName, 
+			com.turalabdullayev.parabola_backend.dto.StoreProfileUpdateRequest request,
+			org.springframework.web.multipart.MultipartFile avatarFile,
+			org.springframework.web.multipart.MultipartFile bannerFile) {
+		
+		if (sellerEmail == null || sellerEmail.isBlank()) {
+			throw new IllegalArgumentException("İstifadəçi identifikasiyası tapılmadı!");
+		}
+
+		User user = getProfileOrOrCreate(sellerEmail, null, roleName);
+		
+		boolean isSellerOrAdmin = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER 
+				|| user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN
+				|| "ROLE_SELLER".equalsIgnoreCase(roleName)
+				|| "ROLE_ADMIN".equalsIgnoreCase(roleName);
+
+		if (!isSellerOrAdmin) {
+			throw new IllegalArgumentException("İcazə verilmədi! Yalnız satıcılar və idarəçilər mağaza profilini yeniləyə bilər.");
+		}
+
+		if (request.getShopName() != null && !request.getShopName().isBlank()) {
+			String cleanShopName = request.getShopName().trim();
+			if (cleanShopName.length() > 60) {
+				throw new IllegalArgumentException("Mağaza adı maksimum 60 simvol ola bilər!");
+			}
+			
+			// If shopName is changing, check uniqueness among other sellers
+			if (!cleanShopName.equalsIgnoreCase(user.getShopName())) {
+				userRepository.findFirstByShopNameIgnoreCase(cleanShopName).ifPresent(otherUser -> {
+					if (!otherUser.getId().equals(user.getId())) {
+						throw new IllegalArgumentException("Bu mağaza adı artıq başqa satıcı tərəfindən istifadə olunur!");
+					}
+				});
+				user.setShopName(cleanShopName);
+			}
+		}
+
+		if (request.getShopPhone() != null) {
+			user.setShopPhone(request.getShopPhone().trim());
+		}
+
+		if (request.getShopLink() != null) {
+			user.setShopLink(request.getShopLink().trim());
+		}
+
+		if (request.getShopBio() != null) {
+			String bio = request.getShopBio().trim();
+			if (bio.length() > 1000) {
+				throw new IllegalArgumentException("Açıqlama mətri maksimum 1000 simvol ola bilər!");
+			}
+			user.setShopBio(bio);
+		}
+
+		// Handle Avatar Upload
+		if (avatarFile != null && !avatarFile.isEmpty()) {
+			if (avatarFile.getSize() > 5 * 1024 * 1024) {
+				throw new IllegalArgumentException("Profil şəklinin ölçüsü 5MB-dan çox ola bilməz!");
+			}
+			try {
+				String avatarUrl = supabaseStorageService.uploadFile(avatarFile);
+				user.setShopAvatarUrl(avatarUrl);
+			} catch (Exception e) {
+				throw new RuntimeException("Profil şəkli yüklənərkən xəta baş verdi: " + e.getMessage());
+			}
+		}
+
+		// Handle Banner Upload
+		if (bannerFile != null && !bannerFile.isEmpty()) {
+			if (bannerFile.getSize() > 5 * 1024 * 1024) {
+				throw new IllegalArgumentException("Baner şəklinin ölçüsü 5MB-dan çox ola bilməz!");
+			}
+			try {
+				String bannerUrl = supabaseStorageService.uploadFile(bannerFile);
+				user.setShopBannerUrl(bannerUrl);
+			} catch (Exception e) {
+				throw new RuntimeException("Baner şəkli yüklənərkən xəta baş verdi: " + e.getMessage());
+			}
+		}
+
+		User savedUser = userRepository.save(user);
+
+		// Sync shopName and contacts to all existing products of this seller
+		if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
+			List<Product> products = productRepository.findBySellerEmail(sellerEmail);
+			if (products != null && !products.isEmpty()) {
+				for (Product p : products) {
+					p.setSellerName(savedUser.getShopName());
+					if (savedUser.getShopPhone() != null && !savedUser.getShopPhone().isBlank()) {
+						p.setContactPhone(savedUser.getShopPhone());
+					}
+					if (savedUser.getShopLink() != null && !savedUser.getShopLink().isBlank()) {
+						p.setContactLink(savedUser.getShopLink());
+					}
+				}
+				productRepository.saveAll(products);
+			}
+		}
+
+		return savedUser;
 	}
 
 	public List<User> getAllUsers() {

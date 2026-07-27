@@ -350,13 +350,30 @@ public class ProductService {
 		String contactPhone = null;
 		String contactLink = null;
 		String sellerEmail = null;
+		String shopAvatarUrl = null;
+		String shopBannerUrl = null;
+		String shopBio = null;
 
 		if (sellerUserOpt.isPresent()) {
 			User sellerUser = sellerUserOpt.get();
 			sellerEmail = sellerUser.getEmail();
-			// Use actual shopName from the User for display consistency
 			if (sellerUser.getShopName() != null && !sellerUser.getShopName().isBlank()) {
 				cleanShopName = sellerUser.getShopName().trim();
+			}
+			if (sellerUser.getShopPhone() != null && !sellerUser.getShopPhone().isBlank()) {
+				contactPhone = sellerUser.getShopPhone().trim();
+			}
+			if (sellerUser.getShopLink() != null && !sellerUser.getShopLink().isBlank()) {
+				contactLink = sellerUser.getShopLink().trim();
+			}
+			if (sellerUser.getShopBio() != null && !sellerUser.getShopBio().isBlank()) {
+				shopBio = sellerUser.getShopBio().trim();
+			}
+			if (sellerUser.getShopAvatarUrl() != null && !sellerUser.getShopAvatarUrl().isBlank()) {
+				shopAvatarUrl = sellerUser.getShopAvatarUrl().trim();
+			}
+			if (sellerUser.getShopBannerUrl() != null && !sellerUser.getShopBannerUrl().isBlank()) {
+				shopBannerUrl = sellerUser.getShopBannerUrl().trim();
 			}
 		}
 
@@ -410,6 +427,9 @@ public class ProductService {
 		storeData.put("sellerEmail", sellerEmail);
 		storeData.put("contactPhone", contactPhone);
 		storeData.put("contactLink", contactLink);
+		storeData.put("shopBio", shopBio);
+		storeData.put("shopAvatarUrl", shopAvatarUrl);
+		storeData.put("shopBannerUrl", shopBannerUrl);
 		storeData.put("totalProducts", products != null ? products.size() : 0);
 		storeData.put("products", products != null ? products : new ArrayList<>());
 		storeData.put("categories", categories);

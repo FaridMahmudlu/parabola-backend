@@ -110,4 +110,32 @@ public class UserController {
 		
 		return ResponseEntity.ok(user);
 	}
+
+	@PutMapping(value = "/store-profile", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+	@Operation(summary = "Satıcı Mağaza Profilini Yenilə (Ad, Nömrə, Link, Bio, Logo, Banner)", description = "Satıcının öz butik mağazasının profil məlumatlarını, profil logosunu və arxa fon (banner) şəklini təhlükəsiz şəkildə bazada və Supabase Storage-da yeniləyir.")
+	public ResponseEntity<User> updateStoreProfile(
+			@AuthenticationPrincipal Jwt jwt,
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
+			@org.springframework.web.bind.annotation.RequestPart(value = "shopName", required = false) String shopName,
+			@org.springframework.web.bind.annotation.RequestPart(value = "shopPhone", required = false) String shopPhone,
+			@org.springframework.web.bind.annotation.RequestPart(value = "shopLink", required = false) String shopLink,
+			@org.springframework.web.bind.annotation.RequestPart(value = "shopBio", required = false) String shopBio,
+			@org.springframework.web.bind.annotation.RequestPart(value = "avatarFile", required = false) org.springframework.web.multipart.MultipartFile avatarFile,
+			@org.springframework.web.bind.annotation.RequestPart(value = "bannerFile", required = false) org.springframework.web.multipart.MultipartFile bannerFile) {
+		
+		String email = extractEmail(jwt, headerEmail);
+		String roleName = clerkRole != null && !clerkRole.isBlank() ? clerkRole : jwt.getClaimAsString("role");
+
+		com.turalabdullayev.parabola_backend.dto.StoreProfileUpdateRequest req = 
+				com.turalabdullayev.parabola_backend.dto.StoreProfileUpdateRequest.builder()
+						.shopName(shopName)
+						.shopPhone(shopPhone)
+						.shopLink(shopLink)
+						.shopBio(shopBio)
+						.build();
+
+		User updatedUser = userService.updateStoreProfile(email, roleName, req, avatarFile, bannerFile);
+		return ResponseEntity.ok(updatedUser);
+	}
 }

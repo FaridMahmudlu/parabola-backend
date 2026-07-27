@@ -54,6 +54,21 @@ public class User {
 	@Column(name = "shop_name")
 	private String shopName;
 
+	@Column(name = "shop_phone")
+	private String shopPhone;
+
+	@Column(name = "shop_link")
+	private String shopLink;
+
+	@Column(name = "shop_bio", length = 1000)
+	private String shopBio;
+
+	@Column(name = "shop_avatar_url")
+	private String shopAvatarUrl;
+
+	@Column(name = "shop_banner_url")
+	private String shopBannerUrl;
+
 	@Column(name = "created_at", updatable = false)
 	private LocalDateTime createdAt;
 
