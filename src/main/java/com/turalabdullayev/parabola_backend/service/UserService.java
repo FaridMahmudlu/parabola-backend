@@ -17,7 +17,8 @@ public class UserService {
 	private final ClerkService clerkService;
 	private final SupabaseStorageService supabaseStorageService;
 
-	public UserService(UserRepository userRepository, ProductRepository productRepository, ClerkService clerkService, SupabaseStorageService supabaseStorageService) {
+	public UserService(UserRepository userRepository, ProductRepository productRepository, ClerkService clerkService,
+			SupabaseStorageService supabaseStorageService) {
 		this.userRepository = userRepository;
 		this.productRepository = productRepository;
 		this.clerkService = clerkService;
@@ -26,7 +27,8 @@ public class UserService {
 
 	public User getProfileOrOrCreate(String email, String clerkUserId, String roleName) {
 		com.turalabdullayev.parabola_backend.entity.Role parsedRole = null;
-		if (roleName != null && !roleName.isBlank() && !"undefined".equalsIgnoreCase(roleName) && !"null".equalsIgnoreCase(roleName)) {
+		if (roleName != null && !roleName.isBlank() && !"undefined".equalsIgnoreCase(roleName)
+				&& !"null".equalsIgnoreCase(roleName)) {
 			try {
 				parsedRole = com.turalabdullayev.parabola_backend.entity.Role.valueOf(roleName.toUpperCase());
 			} catch (IllegalArgumentException e) {
@@ -38,7 +40,8 @@ public class UserService {
 			}
 		}
 
-		final com.turalabdullayev.parabola_backend.entity.Role finalRole = parsedRole != null ? parsedRole : com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
+		final com.turalabdullayev.parabola_backend.entity.Role finalRole = parsedRole != null ? parsedRole
+				: com.turalabdullayev.parabola_backend.entity.Role.ROLE_USER;
 		User user = userRepository.findByEmail(email)
 				.orElseGet(() -> {
 					String username = email != null ? email : "user";
@@ -55,21 +58,26 @@ public class UserService {
 				});
 
 		// Upgrade role if explicitly ROLE_SELLER or ROLE_ADMIN is provided
-		if (parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER || parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+		if (parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
+				|| parsedRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
 			if (user.getRole() != parsedRole) {
 				user.setRole(parsedRole);
 				user = userRepository.save(user);
 			}
 		}
-		// If user has a shopName set in database, ensure their role is ROLE_SELLER (unless they are ADMIN)
+		// If user has a shopName set in database, ensure their role is ROLE_SELLER
+		// (unless they are ADMIN)
 		else if (user.getShopName() != null && !user.getShopName().isBlank()) {
-			if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
+			if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
+					&& user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
 				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
 				user = userRepository.save(user);
 			}
 		}
-		// If no explicit role in JWT, but user is not ROLE_SELLER in DB, check Clerk API
-		else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && clerkUserId != null) {
+		// If no explicit role in JWT, but user is not ROLE_SELLER in DB, check Clerk
+		// API
+		else if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
+				&& clerkUserId != null) {
 			String clerkRole = clerkService.getUserRole(clerkUserId);
 			if ("ROLE_SELLER".equalsIgnoreCase(clerkRole) || "SELLER".equalsIgnoreCase(clerkRole)) {
 				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
@@ -88,8 +96,8 @@ public class UserService {
 		String bodyType = request.getBodyType();
 		String shopName = request.getShopName();
 
-		boolean isUserSeller = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER 
-				|| "ROLE_SELLER".equalsIgnoreCase(roleName) 
+		boolean isUserSeller = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
+				|| "ROLE_SELLER".equalsIgnoreCase(roleName)
 				|| "SELLER".equalsIgnoreCase(roleName);
 
 		if (isUserSeller && (shopName == null || shopName.isBlank())) {
@@ -101,7 +109,8 @@ public class UserService {
 		user.setBodyType(bodyType);
 		user.setShopName(shopName);
 
-		// If user has updated their shop name, set role to ROLE_SELLER (unless they are an admin)
+		// If user has updated their shop name, set role to ROLE_SELLER (unless they are
+		// an admin)
 		if (shopName != null && !shopName.isBlank()) {
 			if (user.getRole() != com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN) {
 				user.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
@@ -113,7 +122,8 @@ public class UserService {
 		userRepository.save(user);
 
 		// If user is a seller and has updated their shop name, sync all their products
-		if (user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && shopName != null && !shopName.isBlank()) {
+		if (user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER && shopName != null
+				&& !shopName.isBlank()) {
 			List<Product> products = productRepository.findBySellerEmail(email);
 			if (products != null && !products.isEmpty()) {
 				for (Product p : products) {
@@ -127,25 +137,26 @@ public class UserService {
 	}
 
 	public User updateStoreProfile(
-			String sellerEmail, 
-			String roleName, 
+			String sellerEmail,
+			String roleName,
 			com.turalabdullayev.parabola_backend.dto.StoreProfileUpdateRequest request,
 			org.springframework.web.multipart.MultipartFile avatarFile,
 			org.springframework.web.multipart.MultipartFile bannerFile) {
-		
+
 		if (sellerEmail == null || sellerEmail.isBlank()) {
 			throw new IllegalArgumentException("İstifadəçi identifikasiyası tapılmadı!");
 		}
 
 		User user = getProfileOrOrCreate(sellerEmail, null, roleName);
-		
-		boolean isSellerOrAdmin = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER 
+
+		boolean isSellerOrAdmin = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
 				|| user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN
 				|| "ROLE_SELLER".equalsIgnoreCase(roleName)
 				|| "ROLE_ADMIN".equalsIgnoreCase(roleName);
 
 		if (!isSellerOrAdmin) {
-			throw new IllegalArgumentException("İcazə verilmədi! Yalnız satıcılar və idarəçilər mağaza profilini yeniləyə bilər.");
+			throw new IllegalArgumentException(
+					"İcazə verilmədi! Yalnız satıcılar və idarəçilər mağaza profilini yeniləyə bilər.");
 		}
 
 		if (request.getShopName() != null && !request.getShopName().isBlank()) {
@@ -153,12 +164,13 @@ public class UserService {
 			if (cleanShopName.length() > 60) {
 				throw new IllegalArgumentException("Mağaza adı maksimum 60 simvol ola bilər!");
 			}
-			
+
 			// If shopName is changing, check uniqueness among other sellers
 			if (!cleanShopName.equalsIgnoreCase(user.getShopName())) {
 				userRepository.findFirstByShopNameIgnoreCase(cleanShopName).ifPresent(otherUser -> {
 					if (!otherUser.getId().equals(user.getId())) {
-						throw new IllegalArgumentException("Bu mağaza adı artıq başqa satıcı tərəfindən istifadə olunur!");
+						throw new IllegalArgumentException(
+								"Bu mağaza adı artıq başqa satıcı tərəfindən istifadə olunur!");
 					}
 				});
 				user.setShopName(cleanShopName);
@@ -176,7 +188,7 @@ public class UserService {
 		if (request.getShopBio() != null) {
 			String bio = request.getShopBio().trim();
 			if (bio.length() > 1000) {
-				throw new IllegalArgumentException("Açıqlama mətri maksimum 1000 simvol ola bilər!");
+				throw new IllegalArgumentException("Açıqlama mətni maksimum 1000 simvol ola bilər!");
 			}
 			user.setShopBio(bio);
 		}
@@ -254,7 +266,8 @@ public class UserService {
 
 		if (targetRole == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER) {
 			if (targetUser.getShopName() == null || targetUser.getShopName().isBlank()) {
-				String shopDefaultName = targetUser.getUsername() != null ? targetUser.getUsername() + " Mağazası" : "Satıcı Mağazası";
+				String shopDefaultName = targetUser.getUsername() != null ? targetUser.getUsername() + " Mağazası"
+						: "Satıcı Mağazası";
 				targetUser.setShopName(shopDefaultName);
 			}
 		}

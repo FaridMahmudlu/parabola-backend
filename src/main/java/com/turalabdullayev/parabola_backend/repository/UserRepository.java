@@ -20,4 +20,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	java.util.List<User> findAllByOrderByIdDesc();
 
 	Optional<User> findFirstByShopNameIgnoreCase(String shopName);
+
+	@org.springframework.data.jpa.repository.Query("SELECT u FROM User u WHERE LOWER(TRIM(u.shopName)) = LOWER(TRIM(:shopName))")
+	Optional<User> findFirstByShopNameTrimmedIgnoreCase(@org.springframework.data.repository.query.Param("shopName") String shopName);
 }

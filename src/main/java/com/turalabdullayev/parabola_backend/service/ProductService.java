@@ -336,8 +336,22 @@ public class ProductService {
 			products = productRepository.findBySellerNameIgnoreCaseOrderByIdDesc(cleanShopName);
 		}
 
-		// 3. Lookup the seller user by shopName
+		// 3. Multi-stage seller User lookup
 		Optional<User> sellerUserOpt = userRepository.findFirstByShopNameIgnoreCase(cleanShopName);
+		if (sellerUserOpt.isEmpty()) {
+			sellerUserOpt = userRepository.findFirstByShopNameTrimmedIgnoreCase(cleanShopName);
+		}
+		if (sellerUserOpt.isEmpty() && products != null && !products.isEmpty()) {
+			for (Product p : products) {
+				if (p.getSellerEmail() != null && !p.getSellerEmail().isBlank()) {
+					sellerUserOpt = userRepository.findByEmail(p.getSellerEmail().trim());
+					if (sellerUserOpt.isPresent()) break;
+				}
+			}
+		}
+		if (sellerUserOpt.isEmpty() && cleanShopName.contains("@")) {
+			sellerUserOpt = userRepository.findByEmail(cleanShopName.trim());
+		}
 
 		// 4. Fallback: if still no products, try finding by seller email from User table
 		if ((products == null || products.isEmpty()) && sellerUserOpt.isPresent()) {
