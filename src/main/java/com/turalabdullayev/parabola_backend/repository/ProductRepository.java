@@ -16,6 +16,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
 	List<Product> findBySellerEmail(String sellerEmail);
 
+	List<Product> findBySellerId(Long sellerId);
+
+	List<Product> findBySellerIdOrderByIdDesc(Long sellerId);
+
 	List<Product> findBySellerNameIgnoreCaseOrderByIdDesc(String sellerName);
 
 	@Query("SELECT p FROM Product p WHERE LOWER(TRIM(p.sellerName)) = LOWER(TRIM(:shopName)) ORDER BY p.id DESC")

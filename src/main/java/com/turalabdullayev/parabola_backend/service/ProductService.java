@@ -48,25 +48,46 @@ public class ProductService {
 					changed = true;
 				}
 
+				Optional<User> uOpt = Optional.empty();
+				if (email != null && !email.isBlank()) {
+					uOpt = userRepository.findByEmail(email.trim());
+				}
+				if (uOpt.isEmpty() && sName != null && !sName.isBlank()) {
+					uOpt = userRepository.findFirstByShopNameIgnoreCase(sName);
+				}
+
 				if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(email) 
 						|| (sName != null && sName.toLowerCase().contains("mleykmahmudlu"))) {
 					if (!"Parabola Admin".equals(sName)) {
 						p.setSellerName("Parabola Admin");
 						changed = true;
 					}
-					Optional<User> uOpt = userRepository.findByEmail("mleykmahmudlu@gmail.com");
-					if (uOpt.isPresent() && !"Parabola Admin".equals(uOpt.get().getShopName())) {
-						User u = uOpt.get();
-						u.setShopName("Parabola Admin");
-						userRepository.save(u);
-					}
-				} else if (email != null && !email.isBlank()) {
-					Optional<User> uOpt = userRepository.findByEmail(email);
-					if (uOpt.isPresent() && uOpt.get().getShopName() != null && !uOpt.get().getShopName().isBlank()) {
-						if (!uOpt.get().getShopName().equals(sName)) {
-							p.setSellerName(uOpt.get().getShopName().trim());
+					p.setSellerEmail("mleykmahmudlu@gmail.com");
+					Optional<User> adminOpt = userRepository.findByEmail("mleykmahmudlu@gmail.com");
+					if (adminOpt.isPresent()) {
+						User adminUser = adminOpt.get();
+						if (adminUser.getShopName() == null || !"Parabola Admin".equals(adminUser.getShopName())) {
+							adminUser.setShopName("Parabola Admin");
+							userRepository.save(adminUser);
+						}
+						if (p.getSellerId() == null || !p.getSellerId().equals(adminUser.getId())) {
+							p.setSellerId(adminUser.getId());
 							changed = true;
 						}
+					}
+				} else if (uOpt.isPresent()) {
+					User u = uOpt.get();
+					if (p.getSellerId() == null || !p.getSellerId().equals(u.getId())) {
+						p.setSellerId(u.getId());
+						changed = true;
+					}
+					if (u.getShopName() != null && !u.getShopName().isBlank() && !u.getShopName().equals(p.getSellerName())) {
+						p.setSellerName(u.getShopName().trim());
+						changed = true;
+					}
+					if (u.getEmail() != null && !u.getEmail().isBlank() && !u.getEmail().equals(p.getSellerEmail())) {
+						p.setSellerEmail(u.getEmail().trim());
+						changed = true;
 					}
 				}
 			}
@@ -83,7 +104,7 @@ public class ProductService {
 				}
 			}
 		} catch (Exception e) {
-			System.err.println("Məhsul satıcı adları təmizlənərkən xəta: " + e.getMessage());
+			System.err.println("Məhsul satıcı adları və ID-ləri təmizlənərkən xəta: " + e.getMessage());
 		}
 	}
 
@@ -110,6 +131,7 @@ public class ProductService {
 		
 		if (sellerOpt.isPresent()) {
 			User seller = sellerOpt.get();
+			product.setSellerId(seller.getId());
 			if (seller.getShopName() == null || seller.getShopName().isBlank() || !seller.getShopName().equals(finalShopName)) {
 				seller.setShopName(finalShopName);
 				userRepository.save(seller);
@@ -133,7 +155,16 @@ public class ProductService {
 
 	// --- READ: satıcının öz məhsulları ---
 	public List<Product> getProductsBySeller(String sellerEmail) {
-		return productRepository.findBySellerEmail(sellerEmail);
+		if (sellerEmail != null && !sellerEmail.isBlank()) {
+			Optional<User> uOpt = userRepository.findByEmail(sellerEmail.trim());
+			if (uOpt.isPresent()) {
+				List<Product> byId = productRepository.findBySellerIdOrderByIdDesc(uOpt.get().getId());
+				if (byId != null && !byId.isEmpty()) {
+					return byId;
+				}
+			}
+		}
+		return productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmail);
 	}
 
 	// --- UPDATE ---
@@ -150,12 +181,17 @@ public class ProductService {
 			throw new RuntimeException("Bu məhsul sizə aid deyil! Yalnız öz məhsullarınızı redaktə edə bilərsiniz.");
 		}
 
+		Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
 		if ("mleykmahmudlu@gmail.com".equalsIgnoreCase(sellerEmail)) {
 			existing.setSellerName("Parabola Admin");
+			sellerOpt.ifPresent(u -> existing.setSellerId(u.getId()));
 		} else {
-			Optional<User> sellerOpt = userRepository.findByEmail(sellerEmail);
-			if (sellerOpt.isPresent() && sellerOpt.get().getShopName() != null && !sellerOpt.get().getShopName().isBlank()) {
-				existing.setSellerName(sellerOpt.get().getShopName());
+			if (sellerOpt.isPresent()) {
+				User seller = sellerOpt.get();
+				existing.setSellerId(seller.getId());
+				if (seller.getShopName() != null && !seller.getShopName().isBlank()) {
+					existing.setSellerName(seller.getShopName());
+				}
 			}
 		}
 		existing.setName(updatedData.getName());
@@ -344,14 +380,15 @@ public class ProductService {
 
 		if (sellerUserOpt.isPresent()) {
 			User sellerUser = sellerUserOpt.get();
+			Long sId = sellerUser.getId();
 			String sEmail = sellerUser.getEmail() != null ? sellerUser.getEmail().trim() : null;
 			String sName = sellerUser.getShopName() != null ? sellerUser.getShopName().trim() : cleanShopName;
 
-			// Fetch products by seller email
-			if (sEmail != null && !sEmail.isBlank()) {
-				List<Product> byEmail = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sEmail);
-				if (byEmail != null) {
-					for (Product p : byEmail) {
+			// PRIMARY RELATIONAL LOOKUP: Fetch products by sellerId (User ID)
+			if (sId != null) {
+				List<Product> byId = productRepository.findBySellerIdOrderByIdDesc(sId);
+				if (byId != null) {
+					for (Product p : byId) {
 						if (p != null && p.getId() != null && addedProductIds.add(p.getId())) {
 							products.add(p);
 						}
@@ -359,16 +396,35 @@ public class ProductService {
 				}
 			}
 
-			// Fetch products by seller shopName
+			// SECONDARY LOOKUP & AUTO-HEALING: Fetch by email or shopName if sellerId was missing on old records
+			if (sEmail != null && !sEmail.isBlank()) {
+				List<Product> byEmail = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sEmail);
+				if (byEmail != null) {
+					for (Product p : byEmail) {
+						if (p != null && p.getId() != null && addedProductIds.add(p.getId())) {
+							if (p.getSellerId() == null && sId != null) {
+								p.setSellerId(sId);
+								productRepository.save(p);
+							}
+							products.add(p);
+						}
+					}
+				}
+			}
+
 			if (sName != null && !sName.isBlank()) {
 				List<Product> byName = productRepository.findBySellerNameTrimmedIgnoreCase(sName);
 				if (byName != null) {
 					for (Product p : byName) {
 						if (p != null && p.getId() != null) {
-							// Ensure product doesn't belong to a DIFFERENT seller email
-							boolean matchesEmail = p.getSellerEmail() == null || p.getSellerEmail().isBlank()
+							boolean matchesEmailOrId = (sId != null && sId.equals(p.getSellerId()))
+									|| p.getSellerEmail() == null || p.getSellerEmail().isBlank()
 									|| (sEmail != null && p.getSellerEmail().trim().equalsIgnoreCase(sEmail));
-							if (matchesEmail && addedProductIds.add(p.getId())) {
+							if (matchesEmailOrId && addedProductIds.add(p.getId())) {
+								if (p.getSellerId() == null && sId != null) {
+									p.setSellerId(sId);
+									productRepository.save(p);
+								}
 								products.add(p);
 							}
 						}

@@ -252,12 +252,13 @@ public class UserService {
 
 		User savedUser = userRepository.save(targetUser);
 
-		// Sync shopName and contacts to all existing products of this target seller
+		// Sync sellerId, shopName and contacts to all existing products of this target seller
 		String sellerEmailToSync = savedUser.getEmail();
 		if (sellerEmailToSync != null && !sellerEmailToSync.isBlank()) {
 			List<Product> products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmailToSync);
 			if (products != null && !products.isEmpty()) {
 				for (Product p : products) {
+					p.setSellerId(savedUser.getId());
 					if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
 						p.setSellerName(savedUser.getShopName());
 					}

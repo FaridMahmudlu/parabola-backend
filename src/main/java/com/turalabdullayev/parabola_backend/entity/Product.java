@@ -68,6 +68,9 @@ public class Product {
 
 	private String style;
 
+	@Column(name = "seller_id")
+	private Long sellerId;
+
 	@Column(name = "seller_email")
 	private String sellerEmail;
 
