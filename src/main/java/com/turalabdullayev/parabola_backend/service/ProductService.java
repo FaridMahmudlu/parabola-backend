@@ -40,7 +40,15 @@ public class ProductService {
 			for (Product p : products) {
 				String email = p.getSellerEmail();
 				String sName = p.getSellerName();
-				
+
+				// Delete specific test product requested by user
+				if (p.getName() != null && "test".equalsIgnoreCase(p.getName().trim()) 
+						&& p.getBrand() != null && "TEST".equalsIgnoreCase(p.getBrand().trim())
+						&& p.getPrice() != null && Math.abs(p.getPrice() - 19.99) < 0.1) {
+					productRepository.delete(p);
+					continue;
+				}
+
 				// Trim all sellerNames to prevent whitespace matching issues
 				if (sName != null && !sName.equals(sName.trim())) {
 					p.setSellerName(sName.trim());
