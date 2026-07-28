@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class PingController {
 
-    @GetMapping({"/", "/api/v1/health"})
+    @GetMapping({"/", "/health", "/ping", "/api/v1/health", "/api/v1/ping"})
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("OK");
     }
