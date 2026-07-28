@@ -117,6 +117,7 @@ public class UserController {
 			@AuthenticationPrincipal Jwt jwt,
 			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
 			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
+			@org.springframework.web.bind.annotation.RequestParam(value = "originalShopName", required = false) String originalShopName,
 			@org.springframework.web.bind.annotation.RequestParam(value = "shopName", required = false) String shopName,
 			@org.springframework.web.bind.annotation.RequestParam(value = "shopPhone", required = false) String shopPhone,
 			@org.springframework.web.bind.annotation.RequestParam(value = "shopLink", required = false) String shopLink,
@@ -135,7 +136,7 @@ public class UserController {
 						.shopBio(shopBio)
 						.build();
 
-		User updatedUser = userService.updateStoreProfile(email, roleName, req, avatarFile, bannerFile);
+		User updatedUser = userService.updateStoreProfile(email, roleName, originalShopName, req, avatarFile, bannerFile);
 		return ResponseEntity.ok(updatedUser);
 	}
 }

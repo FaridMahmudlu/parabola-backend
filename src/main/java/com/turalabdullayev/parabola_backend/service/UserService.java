@@ -136,27 +136,57 @@ public class UserService {
 		return "Profil məlumatlarınız uğurla yadda saxlanıldı!";
 	}
 
+	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
+		"mleykmahmudlu@gmail.com",
+		"fariddmahmudlu2008@gmail.com",
+		"qeyisovli@gmail.com"
+	);
+
 	public User updateStoreProfile(
-			String sellerEmail,
+			String callerEmail,
 			String roleName,
+			String originalShopName,
 			com.turalabdullayev.parabola_backend.dto.StoreProfileUpdateRequest request,
 			org.springframework.web.multipart.MultipartFile avatarFile,
 			org.springframework.web.multipart.MultipartFile bannerFile) {
 
-		if (sellerEmail == null || sellerEmail.isBlank()) {
+		if (callerEmail == null || callerEmail.isBlank()) {
 			throw new IllegalArgumentException("İstifadəçi identifikasiyası tapılmadı!");
 		}
 
-		User user = getProfileOrOrCreate(sellerEmail, null, roleName);
+		User callerUser = getProfileOrOrCreate(callerEmail, null, roleName);
 
-		boolean isSellerOrAdmin = user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
-				|| user.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN
-				|| "ROLE_SELLER".equalsIgnoreCase(roleName)
-				|| "ROLE_ADMIN".equalsIgnoreCase(roleName);
+		boolean isCallerAdmin = callerUser.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN
+				|| "ROLE_ADMIN".equalsIgnoreCase(roleName)
+				|| ALLOWED_ADMIN_EMAILS.contains(callerEmail.toLowerCase().trim());
+
+		User targetUser = callerUser;
+
+		// Try finding the target store's User record by originalShopName or shopName
+		if (originalShopName != null && !originalShopName.isBlank()) {
+			String cleanOrig = originalShopName.trim();
+			java.util.Optional<User> foundUserOpt = userRepository.findFirstByShopNameIgnoreCase(cleanOrig);
+			if (foundUserOpt.isEmpty()) {
+				foundUserOpt = userRepository.findFirstByShopNameTrimmedIgnoreCase(cleanOrig);
+			}
+			if (foundUserOpt.isPresent()) {
+				User foundUser = foundUserOpt.get();
+				boolean isOwner = foundUser.getEmail() != null && foundUser.getEmail().equalsIgnoreCase(callerEmail);
+				if (isCallerAdmin || isOwner) {
+					targetUser = foundUser;
+				} else {
+					throw new IllegalArgumentException("İcazə verilmədi! Yalnız mağazanın sahibi və idarəçilər profili yeniləyə bilər.");
+				}
+			}
+		}
+
+		boolean isSellerOrAdmin = isCallerAdmin
+				|| targetUser.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER
+				|| targetUser.getRole() == com.turalabdullayev.parabola_backend.entity.Role.ROLE_ADMIN
+				|| "ROLE_SELLER".equalsIgnoreCase(roleName);
 
 		if (!isSellerOrAdmin) {
-			throw new IllegalArgumentException(
-					"İcazə verilmədi! Yalnız satıcılar və idarəçilər mağaza profilini yeniləyə bilər.");
+			targetUser.setRole(com.turalabdullayev.parabola_backend.entity.Role.ROLE_SELLER);
 		}
 
 		if (request.getShopName() != null && !request.getShopName().isBlank()) {
@@ -166,23 +196,24 @@ public class UserService {
 			}
 
 			// If shopName is changing, check uniqueness among other sellers
-			if (!cleanShopName.equalsIgnoreCase(user.getShopName())) {
+			if (!cleanShopName.equalsIgnoreCase(targetUser.getShopName())) {
+				final Long targetId = targetUser.getId();
 				userRepository.findFirstByShopNameIgnoreCase(cleanShopName).ifPresent(otherUser -> {
-					if (!otherUser.getId().equals(user.getId())) {
+					if (!otherUser.getId().equals(targetId)) {
 						throw new IllegalArgumentException(
 								"Bu mağaza adı artıq başqa satıcı tərəfindən istifadə olunur!");
 					}
 				});
-				user.setShopName(cleanShopName);
+				targetUser.setShopName(cleanShopName);
 			}
 		}
 
 		if (request.getShopPhone() != null) {
-			user.setShopPhone(request.getShopPhone().trim());
+			targetUser.setShopPhone(request.getShopPhone().trim());
 		}
 
 		if (request.getShopLink() != null) {
-			user.setShopLink(request.getShopLink().trim());
+			targetUser.setShopLink(request.getShopLink().trim());
 		}
 
 		if (request.getShopBio() != null) {
@@ -190,7 +221,7 @@ public class UserService {
 			if (bio.length() > 1000) {
 				throw new IllegalArgumentException("Açıqlama mətni maksimum 1000 simvol ola bilər!");
 			}
-			user.setShopBio(bio);
+			targetUser.setShopBio(bio);
 		}
 
 		// Handle Avatar Upload
@@ -200,7 +231,7 @@ public class UserService {
 			}
 			try {
 				String avatarUrl = supabaseStorageService.uploadFile(avatarFile);
-				user.setShopAvatarUrl(avatarUrl);
+				targetUser.setShopAvatarUrl(avatarUrl);
 			} catch (Exception e) {
 				throw new RuntimeException("Profil şəkli yüklənərkən xəta baş verdi: " + e.getMessage());
 			}
@@ -213,20 +244,23 @@ public class UserService {
 			}
 			try {
 				String bannerUrl = supabaseStorageService.uploadFile(bannerFile);
-				user.setShopBannerUrl(bannerUrl);
+				targetUser.setShopBannerUrl(bannerUrl);
 			} catch (Exception e) {
 				throw new RuntimeException("Baner şəkli yüklənərkən xəta baş verdi: " + e.getMessage());
 			}
 		}
 
-		User savedUser = userRepository.save(user);
+		User savedUser = userRepository.save(targetUser);
 
-		// Sync shopName and contacts to all existing products of this seller
-		if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
-			List<Product> products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmail);
+		// Sync shopName and contacts to all existing products of this target seller
+		String sellerEmailToSync = savedUser.getEmail();
+		if (sellerEmailToSync != null && !sellerEmailToSync.isBlank()) {
+			List<Product> products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmailToSync);
 			if (products != null && !products.isEmpty()) {
 				for (Product p : products) {
-					p.setSellerName(savedUser.getShopName());
+					if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
+						p.setSellerName(savedUser.getShopName());
+					}
 					if (savedUser.getShopPhone() != null && !savedUser.getShopPhone().isBlank()) {
 						p.setContactPhone(savedUser.getShopPhone());
 					}
