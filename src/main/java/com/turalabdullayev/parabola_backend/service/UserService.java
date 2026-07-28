@@ -252,7 +252,7 @@ public class UserService {
 
 		User savedUser = userRepository.save(targetUser);
 
-		// Sync sellerId, shopName and contacts to all existing products of this target seller
+		// Sync sellerId and shopName to all existing products of this target seller (Contacts are IMMUTABLE per product)
 		String sellerEmailToSync = savedUser.getEmail();
 		if (sellerEmailToSync != null && !sellerEmailToSync.isBlank()) {
 			List<Product> products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmailToSync);
@@ -261,12 +261,6 @@ public class UserService {
 					p.setSellerId(savedUser.getId());
 					if (savedUser.getShopName() != null && !savedUser.getShopName().isBlank()) {
 						p.setSellerName(savedUser.getShopName());
-					}
-					if (savedUser.getShopPhone() != null && !savedUser.getShopPhone().isBlank()) {
-						p.setContactPhone(savedUser.getShopPhone());
-					}
-					if (savedUser.getShopLink() != null && !savedUser.getShopLink().isBlank()) {
-						p.setContactLink(savedUser.getShopLink());
 					}
 				}
 				productRepository.saveAll(products);
