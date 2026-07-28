@@ -3,9 +3,11 @@ package com.turalabdullayev.parabola_backend.service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
@@ -328,38 +330,65 @@ public class ProductService {
 			// If decoding fails, continue with cleaned original
 		}
 
-		// 1. Try TRIM-based JPQL query first (handles DB values with trailing spaces)
-		List<Product> products = productRepository.findBySellerNameTrimmedIgnoreCase(cleanShopName);
-
-		// 2. Fallback: exact sellerName match
-		if (products == null || products.isEmpty()) {
-			products = productRepository.findBySellerNameIgnoreCaseOrderByIdDesc(cleanShopName);
-		}
-
-		// 3. Multi-stage seller User lookup
+		// 1. Resolve seller User record for this store page first
 		Optional<User> sellerUserOpt = userRepository.findFirstByShopNameIgnoreCase(cleanShopName);
 		if (sellerUserOpt.isEmpty()) {
 			sellerUserOpt = userRepository.findFirstByShopNameTrimmedIgnoreCase(cleanShopName);
-		}
-		if (sellerUserOpt.isEmpty() && products != null && !products.isEmpty()) {
-			for (Product p : products) {
-				if (p.getSellerEmail() != null && !p.getSellerEmail().isBlank()) {
-					sellerUserOpt = userRepository.findByEmail(p.getSellerEmail().trim());
-					if (sellerUserOpt.isPresent()) break;
-				}
-			}
 		}
 		if (sellerUserOpt.isEmpty() && cleanShopName.contains("@")) {
 			sellerUserOpt = userRepository.findByEmail(cleanShopName.trim());
 		}
 
-		// 4. Fallback: if still no products, try finding by seller email from User table
-		if ((products == null || products.isEmpty()) && sellerUserOpt.isPresent()) {
-			String sellerEmailFromUser = sellerUserOpt.get().getEmail();
-			if (sellerEmailFromUser != null && !sellerEmailFromUser.isBlank()) {
-				products = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sellerEmailFromUser);
+		List<Product> products = new ArrayList<>();
+		Set<Long> addedProductIds = new HashSet<>();
+
+		if (sellerUserOpt.isPresent()) {
+			User sellerUser = sellerUserOpt.get();
+			String sEmail = sellerUser.getEmail() != null ? sellerUser.getEmail().trim() : null;
+			String sName = sellerUser.getShopName() != null ? sellerUser.getShopName().trim() : cleanShopName;
+
+			// Fetch products by seller email
+			if (sEmail != null && !sEmail.isBlank()) {
+				List<Product> byEmail = productRepository.findBySellerEmailIgnoreCaseOrderByIdDesc(sEmail);
+				if (byEmail != null) {
+					for (Product p : byEmail) {
+						if (p != null && p.getId() != null && addedProductIds.add(p.getId())) {
+							products.add(p);
+						}
+					}
+				}
+			}
+
+			// Fetch products by seller shopName
+			if (sName != null && !sName.isBlank()) {
+				List<Product> byName = productRepository.findBySellerNameTrimmedIgnoreCase(sName);
+				if (byName != null) {
+					for (Product p : byName) {
+						if (p != null && p.getId() != null) {
+							// Ensure product doesn't belong to a DIFFERENT seller email
+							boolean matchesEmail = p.getSellerEmail() == null || p.getSellerEmail().isBlank()
+									|| (sEmail != null && p.getSellerEmail().trim().equalsIgnoreCase(sEmail));
+							if (matchesEmail && addedProductIds.add(p.getId())) {
+								products.add(p);
+							}
+						}
+					}
+				}
+			}
+		} else {
+			// If no User found, fetch products matching cleanShopName
+			List<Product> byName = productRepository.findBySellerNameTrimmedIgnoreCase(cleanShopName);
+			if (byName != null) {
+				for (Product p : byName) {
+					if (p != null && p.getId() != null && addedProductIds.add(p.getId())) {
+						products.add(p);
+					}
+				}
 			}
 		}
+
+		// Sort products by ID descending (newest first)
+		products.sort((a, b) -> Long.compare(b.getId(), a.getId()));
 
 		String contactPhone = null;
 		String contactLink = null;
