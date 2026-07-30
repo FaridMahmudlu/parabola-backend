@@ -9,18 +9,24 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Map;
 
 @Service
 public class ClerkService {
 
 	private final RestTemplate restTemplate;
+	private final HttpClient httpClient;
 
 	@Value("${clerk.secret-key:${CLERK_SECRET_KEY:sk_test_wGOtJh1PklqzHNbXCjH1CT3MIWPo2GaUQKCP20Et1z}}")
 	private String clerkSecretKey;
 
 	public ClerkService() {
 		this.restTemplate = new RestTemplate();
+		this.httpClient = HttpClient.newHttpClient();
 	}
 
 	private String getSecretKey() {
@@ -64,28 +70,27 @@ public class ClerkService {
 		return null;
 	}
 
+	/**
+	 * Uses Java's native HttpClient for PATCH requests because Spring's default
+	 * RestTemplate uses HttpURLConnection which does NOT support PATCH method.
+	 */
 	public boolean updateUserRoleInClerk(String clerkUserId, String newRole) {
 		if (clerkUserId == null || clerkUserId.isBlank()) {
 			return false;
 		}
 		try {
 			String url = "https://api.clerk.com/v1/users/" + clerkUserId + "/metadata";
-			HttpHeaders headers = new HttpHeaders();
-			headers.setBearerAuth(getSecretKey());
-			headers.set("Content-Type", "application/json");
+			String jsonBody = "{\"public_metadata\":{\"role\":\"" + newRole + "\"}}";
 
-			Map<String, Object> body = Map.of(
-				"public_metadata", Map.of("role", newRole)
-			);
-			HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+			HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create(url))
+				.header("Authorization", "Bearer " + getSecretKey())
+				.header("Content-Type", "application/json")
+				.method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody))
+				.build();
 
-			ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-				url,
-				HttpMethod.PATCH,
-				entity,
-				new ParameterizedTypeReference<Map<String, Object>>() {}
-			);
-			return response.getStatusCode().is2xxSuccessful();
+			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+			return response.statusCode() >= 200 && response.statusCode() < 300;
 		} catch (Exception e) {
 			System.err.println("Error updating user role in Clerk: " + e.getMessage());
 			return false;
@@ -152,3 +157,4 @@ public class ClerkService {
 		return java.util.Collections.emptyList();
 	}
 }
+
