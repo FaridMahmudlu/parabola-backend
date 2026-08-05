@@ -29,6 +29,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/", "/health", "/ping", "/error", "/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/v1/health", "/api/v1/ping").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/v1/feedback").permitAll()
 						.anyRequest().authenticated())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));

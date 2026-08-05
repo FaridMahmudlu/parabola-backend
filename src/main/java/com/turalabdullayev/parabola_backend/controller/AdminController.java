@@ -20,6 +20,7 @@ import com.turalabdullayev.parabola_backend.entity.Product;
 import com.turalabdullayev.parabola_backend.service.UserService;
 import com.turalabdullayev.parabola_backend.service.ClerkService;
 import com.turalabdullayev.parabola_backend.repository.ProductRepository;
+import com.turalabdullayev.parabola_backend.repository.FeedbackRepository;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,11 +35,14 @@ public class AdminController {
 	private final UserService userService;
 	private final ClerkService clerkService;
 	private final ProductRepository productRepository;
+	private final FeedbackRepository feedbackRepository;
 
-	public AdminController(UserService userService, ClerkService clerkService, ProductRepository productRepository) {
+	public AdminController(UserService userService, ClerkService clerkService, ProductRepository productRepository,
+			FeedbackRepository feedbackRepository) {
 		this.userService = userService;
 		this.clerkService = clerkService;
 		this.productRepository = productRepository;
+		this.feedbackRepository = feedbackRepository;
 	}
 
 	private static final java.util.Set<String> ALLOWED_ADMIN_EMAILS = java.util.Set.of(
@@ -313,5 +317,24 @@ public class AdminController {
 		} catch (Exception e) {
 			return ResponseEntity.internalServerError().body(Map.of("message", "Xəta baş verdi: " + e.getMessage()));
 		}
+	}
+
+	@GetMapping("/feedback")
+	@Operation(summary = "Son istifadəçi rəylərini gətir (Admin)")
+	public ResponseEntity<?> getFeedback(
+			@RequestHeader(value = "X-Clerk-Role", required = false) String clerkRole,
+			@RequestHeader(value = "X-Clerk-User-Email", required = false) String headerEmail,
+			@AuthenticationPrincipal Jwt jwt) {
+		if (jwt == null) {
+			return ResponseEntity.status(401).body(Map.of("message", "Giriş edilməyib."));
+		}
+
+		String email = extractEmail(jwt, headerEmail);
+		User adminUser = userService.getProfileOrOrCreate(email, jwt.getSubject(), clerkRole);
+		if (!isAdmin(adminUser, jwt, clerkRole, headerEmail)) {
+			return ResponseEntity.status(403).body(Map.of("message", "Giriş qadağandır! Yalnız idarəçilər rəylərə baxa bilər."));
+		}
+
+		return ResponseEntity.ok(feedbackRepository.findTop200ByOrderByCreatedAtDesc());
 	}
 }
